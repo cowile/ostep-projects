@@ -1,5 +1,3 @@
-#include <errno.h>
-#include <error.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -13,15 +11,6 @@ void write_file(FILE *f)
 	while(fgets(buffer, BUFFER_SIZE, f) != NULL)
 	{
 		fputs(buffer, stdout);
-		if(errno != 0)
-		{
-			error(EXIT_FAILURE, errno, "error writing");
-		}
-	}
-
-	if(errno != 0)
-	{
-		error(EXIT_FAILURE, errno, "error reading file");
 	}
 }
 

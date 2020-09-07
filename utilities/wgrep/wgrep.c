@@ -1,5 +1,3 @@
-#include <errno.h>
-#include <error.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,18 +16,7 @@ void search_file(FILE *f, char *term)
 		{
 			fputs(line, stdout);
 		}
-
-		if(errno != 0)
-		{
-			error(EXIT_FAILURE, errno, "error writing");
-		}
 	}
-
-	if(errno != 0)
-	{
-		error(EXIT_FAILURE, errno, "error reading file");
-	}
-
 }
 
 int main(int argc, char **argv)
