@@ -76,7 +76,7 @@ void io_copy(FILE *i, FILE *o)
 	while(lines.top != 0)
 	{
 		line = pop(&lines);
-		fprintf(o, line);
+		fprintf(o, "%s", line);
 	}
 
 	if(errno != 0)
