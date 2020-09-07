@@ -1,26 +1,20 @@
 #include <errno.h>
 #include <error.h>
-/* This implementation is closer to actual grep by using the system
- * regex library. This goes beyond the simple string matching
- * specified.
- */
-#include <regex.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 const char *CANNOT_OPEN_ERR = "wgrep: cannot open file\n";
 const char *USAGE_ERR = "wgrep: searchterm [file ...]\n";
-const size_t REG_BUF_SIZE = 128;
 
-void search_file(FILE *f, regex_t *pat)
+void search_file(FILE *f, char *term)
 {
 	char *line = NULL;
 	size_t n = 0;
-	int reg_err = 0;
 
 	while(getline(&line, &n, f) != -1)
 	{
-		if((reg_err = regexec(pat, line, 0, NULL, 0)) == 0)
+		if(strstr(line, term) != NULL)
 		{
 			fputs(line, stdout);
 		}
@@ -40,12 +34,9 @@ void search_file(FILE *f, regex_t *pat)
 
 int main(int argc, char **argv)
 {
-	char *pat_string;
 	char *path;
+	char *search_term;
 	FILE *f;
-	regex_t pat;
-	int reg_err = 0;
-	char reg_err_buf[REG_BUF_SIZE];
 
 	if(argc == 1)
 	{
@@ -56,19 +47,11 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	if(argc > 1)
-	{
-		pat_string = argv[1];
-		if((reg_err = regcomp(&pat, pat_string, 0)) != 0)
-		{
-			regerror(reg_err, &pat, reg_err_buf, REG_BUF_SIZE);
-			error(EXIT_FAILURE, 0, "error regex compile: %s", reg_err_buf);
-		}
-	}
-
+	search_term = argv[1];
+	
 	if(argc == 2)
 	{
-		search_file(stdin, &pat);
+		search_file(stdin, search_term);
 	}
 	
 	for(int i = 2; i < argc; i++)
@@ -83,7 +66,7 @@ int main(int argc, char **argv)
 			return EXIT_FAILURE;
 		}
 
-		search_file(f, &pat);
+		search_file(f, search_term);
 	}
 
 	return EXIT_SUCCESS;
