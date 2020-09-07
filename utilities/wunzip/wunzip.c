@@ -14,7 +14,17 @@ struct run_length_block
 };
 
 void uncompress(FILE *f)
-{}
+{
+	struct run_length_block rlb;
+
+	while(fread(&rlb, sizeof(rlb), 1, f) == 1)
+	{
+		for(int i = 0; i < rlb.n; i++)
+		{
+			putchar(rlb.c);
+		}
+	}
+}
 
 int main(int argc, char **argv)
 {
@@ -36,7 +46,7 @@ int main(int argc, char **argv)
 			error(EXIT_FAILURE, errno, "%s", path);
 		}
 
-		/* compress(f, &rlb); */
+		uncompress(f);
 	}
 
 	return EXIT_SUCCESS;
