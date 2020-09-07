@@ -1,5 +1,9 @@
 #include <errno.h>
 #include <error.h>
+/* This implementation is closer to actual grep by using the system
+ * regex library. This goes beyond the simple string matching
+ * specified.
+ */
 #include <regex.h>
 #include <stdlib.h>
 #include <stdio.h>
