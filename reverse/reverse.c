@@ -83,6 +83,8 @@ void io_copy(FILE *i, FILE *o)
 	{
 		error(EXIT_FAILURE, errno, "error writing output");
 	}
+
+	free(lines.data);
 }
 
 int main(int argc, char **argv)

@@ -54,6 +54,7 @@ int main(int argc, char **argv)
 		}
 
 		search_file(f, search_term);
+		fclose(f);
 	}
 
 	return EXIT_SUCCESS;

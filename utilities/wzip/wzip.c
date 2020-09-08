@@ -55,6 +55,7 @@ int main(int argc, char **argv)
 		}
 
 		compress(f, &rlb);
+		fclose(f);
 	}
 
 	if(rlb.n != 0)

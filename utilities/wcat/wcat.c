@@ -32,6 +32,7 @@ int main(int argc, char **argv)
 		}
 
 		write_file(f);
+		fclose(f);
 	}
 
 	return EXIT_SUCCESS;

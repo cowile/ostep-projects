@@ -47,6 +47,7 @@ int main(int argc, char **argv)
 		}
 
 		uncompress(f);
+		fclose(f);
 	}
 
 	return EXIT_SUCCESS;
