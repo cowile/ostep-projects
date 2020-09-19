@@ -20,7 +20,7 @@ void shell_chdir(char *path)
 {
 	if(chdir(path) == -1)
 	{
-		fprintf(stdout, ERROR);
+		fprintf(stderr, ERROR);
 	}
 }
 
@@ -98,7 +98,7 @@ void execute_command(char **args, size_t n)
 	}
 	else
 	{
-		fprintf(stdout, ERROR);
+		fprintf(stderr, ERROR);
 	}
 }
 
@@ -117,7 +117,7 @@ int main(int argc, char **argv)
 
 	if(argc > 2)
 	{
-		fprintf(stdout, ERROR);
+		fprintf(stderr, ERROR);
 		return EXIT_FAILURE;
 	}
 
@@ -125,7 +125,7 @@ int main(int argc, char **argv)
 	{
 		if((input = fopen(argv[1], "r")) == NULL)
 		{
-			fprintf(stdout, ERROR);
+			fprintf(stderr, ERROR);
 			return EXIT_FAILURE;
 		}
 	}
