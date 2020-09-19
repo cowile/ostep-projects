@@ -91,7 +91,10 @@ void execute_command(char **args, size_t n)
 	}
 	else if((abs_path = absolute_path(args[0])) != NULL)
 	{
-		// fork and exec
+		if(fork() == 0)
+		{
+			execv(abs_path, args);
+		}
 	}
 	else
 	{
