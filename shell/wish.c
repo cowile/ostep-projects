@@ -17,10 +17,41 @@ size_t SEARCH_PATHS_LEN = 0;
 
 void update_search_paths(char **paths, size_t paths_len)
 {
+	for(size_t i = 0; i < SEARCH_PATHS_LEN; i++)
+	{
+		free(SEARCH_PATHS[i]);
+	}
+
+	free(SEARCH_PATHS);
+	SEARCH_PATHS = calloc(paths_len, sizeof(char *));
+
+	for(size_t i = 0; i < n; i++)
+	{
+		SEARCH_PATHS[i] = strdup(paths[i]);
+	}
 }
 
 char *absolute_path(char *prog_name)
 {
+	/* Can probably get away with this assumption. */
+	char prog_path[4096];
+
+	/* Start with a slash means we already have the absolute path. */
+	if(prog_name[0] == '/')
+	{
+		return prog_name;
+	}
+
+	for(size_t i = 0; i < SEARCH_PATHS_LEN; i++)
+	{
+		snprintf(prog_path, 4096, "%s/%s", SEARCH_PATHS[i], prog_name);
+
+		if(access(prog_path, X_OK) == 0)
+		{
+			return strdup(prog_path);
+		}
+	}
+
 	return NULL;
 }
 
@@ -65,6 +96,8 @@ void run_cmd(char **args, size_t args_len, FILE *redirect)
 	{
 		run_program(exec_path, args, args_len, redirect);
 	}
+
+	free(exec_path);
 }
 
 void exec_cmd(char *cmd, size_t cmd_len)
@@ -133,7 +166,7 @@ void exec_line(char *line, size_t len)
 {
 	char *cmd = strsep(&line, CMD_SEP);
 
-	while(cmd != NULL)
+	while(cmd != NULL && *cmd != '\0')
 	{
 		/* Since line is updated to point after the null byte,
 		 * length of command string is given by line - cmd
@@ -144,7 +177,11 @@ void exec_line(char *line, size_t len)
 	}
 
 	/* Now wait for all children to finish. */
-	while(wait(NULL) != ECHILD);
+	errno = 0;
+	while(errno != ECHILD)
+	{
+		wait(NULL);
+	}
 }
 
 int main(int argc, char **argv)
@@ -166,9 +203,19 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	if(input == stdin)
+	{
+		printf(PROMPT);
+	}
+
 	while((line_len = getline(&line, &n, input)) != -1)
 	{
 		exec_line(line, line_len);
+
+		if(input == stdin)
+		{
+			printf(PROMPT);
+		}
 	}
 
 	free(line);
