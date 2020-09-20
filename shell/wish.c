@@ -11,6 +11,9 @@ const char *CMD_SEP = "&\n";
 const char *ARG_SEP = " \f\r\t\v";
 const char *PROMPT = "wish> ";
 const char *ERROR = "An error has occurred\n";
+char *DEFAULT_PATHS[] = {
+	"/bin"
+};
 
 char **SEARCH_PATHS = NULL;
 size_t SEARCH_PATHS_LEN = 0;
@@ -24,8 +27,9 @@ void update_search_paths(char **paths, size_t paths_len)
 
 	free(SEARCH_PATHS);
 	SEARCH_PATHS = calloc(paths_len, sizeof(char *));
+	SEARCH_PATHS_LEN = paths_len;
 
-	for(size_t i = 0; i < n; i++)
+	for(size_t i = 0; i < paths_len; i++)
 	{
 		SEARCH_PATHS[i] = strdup(paths[i]);
 	}
@@ -55,6 +59,14 @@ char *absolute_path(char *prog_name)
 	return NULL;
 }
 
+bool is_builtin(char *name)
+{
+	return
+		strcmp(name, "exit") == 0 ||
+		strcmp(name, "cd") == 0 ||
+		strcmp(name, "path") == 0;
+}
+		
 void run_builtin(char **args, size_t args_len)
 {
 	if(strcmp(args[0], "exit") == 0 && args_len == 1)
@@ -80,26 +92,58 @@ void run_builtin(char **args, size_t args_len)
 	}
 }
 
-void run_program(char *name, char **args, size_t args_len, FILE *redirect)
+void run_program(char *name, char **args, size_t args_len, char *redirect)
 {
+	pid_t p = fork();
+
+	if(p < 0)
+	{
+		fprintf(stderr, ERROR);
+	}
+	else if(p == 0)
+	{
+		if(redirect != NULL)
+		{
+			freopen(redirect, "w", stdout);
+			freopen(redirect, "w", stderr);
+		}
+		execv(name, args);
+		
+		if(errno != 0)
+		{
+			fprintf(stderr, ERROR);
+			errno = 0;
+		}
+	}
 }
 
-void run_cmd(char **args, size_t args_len, FILE *redirect)
+void run_cmd(char **args, size_t args_len, char *redirect)
 {
 	char *exec_path = absolute_path(args[0]);
 
-	if(exec_path == NULL)
+	if(is_builtin(args[0]))
 	{
 		run_builtin(args, args_len);
 	}
-	else
+	else if(exec_path != NULL)
 	{
 		run_program(exec_path, args, args_len, redirect);
+	}
+	else
+	{
+		fprintf(stderr, ERROR);
 	}
 
 	free(exec_path);
 }
 
+/* Redirection is awful to implement how the tests want. Many error
+ * cases have a valid interpretation.
+ */
+
+/* Damn strsep to hell! String handling in C is satanic. This may be
+ * the hardest project for that reason alone.
+ */
 void exec_cmd(char *cmd, size_t cmd_len)
 {
 	/* The maximum possible number of arguments occurs when one
@@ -109,8 +153,10 @@ void exec_cmd(char *cmd, size_t cmd_len)
 	char *args[cmd_len / 2 + 1];
 	size_t args_len = 0;
 	char *arg = strsep(&cmd, ARG_SEP);
-	bool open_redirect = false;
-	FILE *redirect_file = NULL;
+	char *redir = NULL;
+	bool redirect = false;
+	bool have_file = false;
+	char *redirect_file = NULL;
 
 	while(arg != NULL)
 	{
@@ -120,42 +166,65 @@ void exec_cmd(char *cmd, size_t cmd_len)
 		if(*arg == '\0')
 		{
 		}
-		else if(open_redirect)
+		else if(redirect)
 		{
-			open_redirect = false;
-			if((redirect_file = fopen(arg, "w")) == NULL)
+			if(have_file)
 			{
 				fprintf(stderr, ERROR);
-				exit(EXIT_FAILURE);
+				return;
+			}
+			else
+			{
+				have_file = true;
+				redirect_file = arg;
 			}
 		}
-		/* Redirection can possibly occur with or without
-		 * space separating the operator. An argument with a
-		 * redirection operator needs special handling.
-		 */
-		else if(strchr(arg, '>') == NULL)
+		else if((redir = strchr(arg, '>')) != NULL)
 		{
-			/* No redirection. Easy. */
-			args[args_len] = arg;
-			args_len++;
-		}
-		else
-		{
-			open_redirect = true;
-			arg = strsep(&cmd, ">");
-
-			/* Possibly an argument before the redirect operator. */
-			if(*arg != '\0')
+			/* Redirect case. */
+			redirect = true;
+			if(args_len == 0)
 			{
+				break;
+			}
+
+			/* If the redirect is not first, part
+			 * of the arg goes with the command.
+			 */
+			if(redir != arg)
+			{
+				*redir = '\0';
 				args[args_len] = arg;
 				args_len++;
 			}
+
+			/* If the redirect is not last, part of the
+			 * arg is a filename.
+			 */
+			if(*(redir + 1) != '\0')
+			{
+				redirect_file = redir + 1;
+				have_file = true;
+			}
+		}
+		else
+		{
+			args[args_len] = arg;
+			args_len++;
 		}
 
 		arg = strsep(&cmd, ARG_SEP);
 	}
 
-	run_cmd(args, args_len, redirect_file);
+	if(redirect && !have_file)
+	{
+		fprintf(stderr, ERROR);
+	}
+	else if(args_len > 0)
+	{
+		args[args_len] = NULL;
+		run_cmd(args, args_len, redirect_file);
+	}
 }
 
 /* For the scope given, take advantage of the fact that the only time
@@ -191,6 +260,8 @@ int main(int argc, char **argv)
 	size_t n = 0;
 	ssize_t line_len;
 
+	update_search_paths(DEFAULT_PATHS, sizeof(DEFAULT_PATHS)/sizeof(DEFAULT_PATHS[0]));
+	
 	if(argc > 2)
 	{
 		fprintf(stderr, ERROR);
