@@ -129,11 +129,15 @@ int main(int argc, char **argv)
 			return EXIT_FAILURE;
 		}
 	}
+	else
+	{
+		fprintf(stdout, PROMPT);
+	}
 
 	while((line_len = getline(&line, &n, input)) != -1)
 	{
 		line_pos = line;
-		token = line_pos;
+		token = strsep(&line_pos, " \f\n\r\t\v");
 		/* Maximum possible length of argument list occurs
 		 * with one character arguments every other
 		 * position. Example: "a a a" has three arguments and
@@ -141,10 +145,11 @@ int main(int argc, char **argv)
 		args = calloc(line_len / 2 + 1, sizeof(char *));
 		while(token != NULL)
 		{
-			if(*token == '\n' || *token == ';' || *token == '&')
+			if(*line_pos == '\0' || *token == ';' || *token == '&')
 			{
 				execute_command(args, args_len);
 				while(*token != '&' && wait(NULL) != ECHILD);
+				args_len = 0;
 			}
 			else
 			{
@@ -152,10 +157,15 @@ int main(int argc, char **argv)
 				args_len++;
 			}
 
-			token = strsep(&line_pos, " \f\r\t\v");
+			token = strsep(&line_pos, " \f\n\r\t\v");
 		}
 
 		free(args);
+
+		if(input == stdin)
+		{
+			fprintf(stdout, PROMPT);
+		}
 	}
 
 	free(line);
