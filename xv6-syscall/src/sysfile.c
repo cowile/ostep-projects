@@ -67,6 +67,7 @@ sys_dup(void)
 }
 
 static int readcount = 0;
+static struct spinlock readcount_lock;
 
 int sys_getreadcount(void)
 {
@@ -79,7 +80,15 @@ sys_read(void)
   struct file *f;
   int n;
   char *p;
+
+  if(readcount == 0)
+  {
+    initlock(&readcount_lock, "readcount lock");
+  }
+
+  acquire(&readcount_lock);
   readcount++;
+  release(&readcount_lock);
 
   if(argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argptr(1, &p, n) < 0)
     return -1;
