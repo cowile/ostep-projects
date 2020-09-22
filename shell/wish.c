@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+const char *REDIR_SEP = ">";
 const char *CMD_SEP = "&\n";
 const char *ARG_SEP = " \f\r\t\v";
 const char *PROMPT = "wish> ";
@@ -137,94 +138,72 @@ void run_cmd(char **args, size_t args_len, char *redirect)
 	free(exec_path);
 }
 
-/* Redirection is awful to implement how the tests want. Many error
- * cases have a valid interpretation.
- */
-
-/* Damn strsep to hell! String handling in C is satanic. This may be
- * the hardest project for that reason alone.
- */
-void exec_cmd(char *cmd, size_t cmd_len)
+void arg_list(char *cmd, size_t cmd_len, size_t *argc, char ***argv)
 {
 	/* The maximum possible number of arguments occurs when one
 	 * character arguments alternate with space. Example: "a a a"
 	 * has 5 characters and three arguments. 5 / 2 + 1 = 3
 	 */
-	char *args[cmd_len / 2 + 1];
-	size_t args_len = 0;
+	*argv = calloc(cmd_len / 2 + 1, sizeof(char *));
 	char *arg = strsep(&cmd, ARG_SEP);
-	char *redir = NULL;
-	bool redirect = false;
-	bool have_file = false;
-	char *redirect_file = NULL;
 
 	while(arg != NULL)
 	{
-		/* If there is arbitrary space, argument may be
-		 * empty. Do nothing.
-		 */
-		if(*arg == '\0')
+		if(*arg != '\0')
 		{
-		}
-		else if(redirect)
-		{
-			if(have_file)
-			{
-				fprintf(stderr, ERROR);
-				return;
-			}
-			else
-			{
-				have_file = true;
-				redirect_file = arg;
-			}
-		}
-		else if((redir = strchr(arg, '>')) != NULL)
-		{
-			/* Redirect case. */
-			redirect = true;
-			if(args_len == 0)
-			{
-				break;
-			}
-
-			/* If the redirect is not first, part
-			 * of the arg goes with the command.
-			 */
-			if(redir != arg)
-			{
-				*redir = '\0';
-				args[args_len] = arg;
-				args_len++;
-			}
-
-			/* If the redirect is not last, part of the
-			 * arg is a filename.
-			 */
-			if(*(redir + 1) != '\0')
-			{
-				redirect_file = redir + 1;
-				have_file = true;
-			}
-		}
-		else
-		{
-			args[args_len] = arg;
-			args_len++;
+			(*argv)[*argc] = arg;
+			(*argc)++;
 		}
 
 		arg = strsep(&cmd, ARG_SEP);
 	}
+}
 
-	if(redirect && !have_file)
+void redir_file(char *after_marker, char **filename)
+{
+	char *red = strsep(&after_marker, ARG_SEP);
+	bool found_filename = false;
+
+	while(red != NULL)
+	{
+	        if(*red != '\0')
+		{
+			if(found_filename)
+			{
+				*filename = NULL;
+			}
+			else
+			{
+				found_filename = true;
+				*filename = red;
+			}
+		}
+
+		red = strsep(&after_marker, ARG_SEP);
+	}
+}
+
+void exec_cmd(char *redir, size_t len)
+{
+	char *cmd = strsep(&redir, REDIR_SEP);
+	char **argv = NULL;
+	size_t argc = 0;
+	char *filename = NULL;
+	bool is_redirect = (redir != NULL);
+
+	arg_list(cmd, strlen(cmd), &argc, &argv);
+	redir_file(redir, &filename);
+
+	if((argc == 0 && is_redirect) || (is_redirect && filename == NULL))
 	{
 		fprintf(stderr, ERROR);
 	}
-	else if(args_len > 0)
+	else if(argc != 0)
 	{
-		args[args_len] = NULL;
-		run_cmd(args, args_len, redirect_file);
+		run_cmd(argv, argc, filename);
 	}
+
+	free(argv);
 }
 
 /* For the scope given, take advantage of the fact that the only time
@@ -235,13 +214,13 @@ void exec_line(char *line, size_t len)
 {
 	char *cmd = strsep(&line, CMD_SEP);
 
-	while(cmd != NULL && *cmd != '\0')
+	while(cmd != NULL)
 	{
-		/* Since line is updated to point after the null byte,
-		 * length of command string is given by line - cmd
-		 * - 1.
-		 */
-		exec_cmd(cmd, line - cmd - 1);
+		if(*cmd != '\0')
+		{
+			exec_cmd(cmd, strlen(cmd));
+		}
+
 		cmd = strsep(&line, "&\n");
 	}
 
