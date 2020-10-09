@@ -4,13 +4,18 @@ out=$PWD/TestCase_Results.txt
 
 rm -f $out
 
-for dir in $@
+for script in $@
 do
-    pushd $dir
-    make
-    printf "$dir:\n" >>$out
-    ./test-$(basename $dir).sh >>$out
+    pushd $(dirname $script)
+
+    if [[ -r Makefile ]]
+    then
+	make
+    fi
+
+    printf "$script:\n" >>$out
+    ./$(basename $script) >>$out
     printf "\n" >>$out
-    make clean
+    git clean -dfx
     popd
 done
