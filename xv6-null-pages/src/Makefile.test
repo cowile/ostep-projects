@@ -12,7 +12,6 @@ OBJS = \
 	log.o\
 	main.o\
 	mp.o\
-	mprotect.o\
 	picirq.o\
 	pipe.o\
 	proc.o\
