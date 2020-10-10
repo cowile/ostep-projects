@@ -40,6 +40,11 @@ exec(char *path, char **argv)
 
   // Load program into memory.
   sz = 0;
+  // Allocate null pages.
+  if((sz = allocuvm(pgdir, sz, USER_VA_START)) == 0)
+    goto bad;
+  // Make it inacceccible to users.
+  clearpteu(pgdir, (char *)0);
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
       goto bad;
