@@ -26,7 +26,7 @@ int sys_mprotect(void)
 
   if(argint(1, &len) < 0 || len <= 0)
     return -1;
-  if((uint)addr % PGSIZE != 0 || argptr(0, &addr, len * PGSIZE))
+  if(argptr(0, &addr, len * PGSIZE) < 0 || (uint)addr % PGSIZE != 0)
     return -1;
   if(mprotect(addr, len))
     return -1;
@@ -40,7 +40,7 @@ int sys_munprotect(void)
 
   if(argint(1, &len) < 0 || len <= 0)
     return -1;
-  if((uint)addr % PGSIZE != 0 || argptr(0, &addr, len * PGSIZE))
+  if(argptr(0, &addr, len * PGSIZE) < 0 || (uint)addr % PGSIZE != 0)
     return -1;
   if(mprotect(addr, len))
     return -1;
