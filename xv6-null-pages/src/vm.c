@@ -54,6 +54,75 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   return &pgtab[PTX(va)];
 }
 
+// mmark
+// Starting at addr, set len pages with the given permissions.
+int mmark(void *addr, int len, int set, int flag)
+{
+  struct proc *curproc = myproc();
+  pte_t *pgdir = curproc->pgdir;
+  pte_t *pgtab_ent;
+
+  for(int i = 0; i < len; i++)
+  {
+    if((pgtab_ent = walkpgdir(pgdir, addr + (i * PGSIZE), 0)) == 0)
+      return -1;
+    if((*pgtab_ent & PTE_P) == 0)
+      return -1;
+    if(set)
+      *pgtab_ent = *pgtab_ent | flag;
+    else
+      *pgtab_ent = *pgtab_ent & ~flag;
+  }
+
+  lcr3(V2P(pgdir));
+  return 0;
+}
+
+// mprotect
+// Set pages read-only.
+
+int mprotect(void *addr, int len)
+{
+  return mmark(addr, len, 0, PTE_W);
+}
+
+// munprotect
+// Reverse mprotect.
+int munprotect(void *addr, int len)
+{
+  return mmark(addr, len, 1, PTE_W);
+}
+
+int sys_mprotect(void)
+{
+  char *addr;
+  int len;
+
+  // Must hae positive len.
+  if(argint(1, &len) < 0 || len <= 0)
+    return -1;
+  // len * PGSIZE is the size of memory we protect. Must be page aligned.
+  if(argptr(0, &addr, len * PGSIZE) < 0 || (uint)addr % PGSIZE != 0)
+    return -1;
+  if(mprotect(addr, len))
+    return -1;
+  return 0;
+}
+
+int sys_munprotect(void)
+{
+  char *addr;
+  int len;
+
+  if(argint(1, &len) < 0 || len <= 0)
+    return -1;
+  if(argptr(0, &addr, len * PGSIZE) < 0 || (uint)addr % PGSIZE != 0)
+    return -1;
+  if(munprotect(addr, len))
+    return -1;
+  return 0;
+}
+
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
