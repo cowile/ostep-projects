@@ -60,17 +60,21 @@ int mmark(void *addr, int len, int set, int flag)
 {
   struct proc *curproc = myproc();
   pte_t *pgdir = curproc->pgdir;
-  pte_t *pgtab;
+  pte_t *pgtab_ent;
 
   for(int i = 0; i < len; i++)
   {
-    if((pgtab = walkpgdir(pgdir, addr + (i * PGSIZE), 0)) == 0)
+    if((pgtab_ent = walkpgdir(pgdir, addr + (i * PGSIZE), 0)) == 0)
+      return -1;
+    if((*pgtab_ent & PTE_P) == 0)
       return -1;
     if(set)
-      *pgtab = PTE_ADDR(*pgtab) | flag;
+      *pgtab_ent = *pgtab_ent | flag;
     else
-      *pgtab = PTE_ADDR(*pgtab) & ~flag;
+      *pgtab_ent = *pgtab_ent & ~flag;
   }
+
+  lcr3(V2P(pgdir));
   return 0;
 }
 
@@ -79,14 +83,14 @@ int mmark(void *addr, int len, int set, int flag)
 
 int mprotect(void *addr, int len)
 {
-  return mmark(addr, len, 1, PTE_W);
+  return mmark(addr, len, 0, PTE_W);
 }
 
 // munprotect
 // Reverse mprotect.
 int munprotect(void *addr, int len)
 {
-  return mmark(addr, len, 0, PTE_W);
+  return mmark(addr, len, 1, PTE_W);
 }
 
 int sys_mprotect(void)
@@ -114,7 +118,7 @@ int sys_munprotect(void)
     return -1;
   if(argptr(0, &addr, len * PGSIZE) < 0 || (uint)addr % PGSIZE != 0)
     return -1;
-  if(mprotect(addr, len))
+  if(munprotect(addr, len))
     return -1;
   return 0;
 }
