@@ -92,8 +92,8 @@ extern int      ismp;
 void            mpinit(void);
 
 // mprotect.c
-void            mprotect(void *addr, int len);
-void            munprotect(void *addr, int len);
+int            mprotect(void *addr, int len);
+int            munprotect(void *addr, int len);
 
 // picirq.c
 void            picenable(int);
