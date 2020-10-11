@@ -226,7 +226,78 @@ fork(void)
 // using stack as the call stack.
 int clone(void (*func)(void *, void *), void *arg_1, void *arg_2, void *stack)
 {
-  return -1;
+  int i, pid;
+  struct proc *np;
+  struct proc *curproc = myproc();
+  char *sp;
+
+  // Allocate process.
+  if((np = allocproc()) == 0){
+    return -1;
+  }
+
+  // Use the same memory space for child process.
+  np->pgdir = curproc->pgdir;
+  np->sz = curproc->sz;
+  np->parent = curproc;
+  *np->tf = *curproc->tf;
+
+  // Use user-allocated stack for kstack.
+  kfree(np->kstack);
+  np->kstack = stack;
+  sp = np->kstack + KSTACKSIZE;
+
+  // Set up arguments for func using cdecl calling convention.
+  sp -= 4;
+  *(uint*)sp = (uint)arg_2;
+  sp -= 4;
+  *(uint*)sp = (uint)arg_1;
+
+  // If func returns, the thread should exit and clean up the process.
+  sp -= 4;
+  *(uint*)sp = (uint)&exit;
+
+  // Old base pointer is at the very bottom of the stack.
+  sp -= 4;
+  *(uint*)sp = (uint)(np->kstack + KSTACKSIZE);
+
+  // Set up the stack so trapret returns into our user-defined fuction.
+  sp -= 4;
+  *(uint*)sp = (uint)func;
+
+  // Leave room for trap frame.
+  sp -= sizeof *np->tf;
+  np->tf = (struct trapframe*)sp;
+
+  // Set up new context to start executing at forkret,
+  // which returns to trapret.
+  sp -= 4;
+  *(uint*)sp = (uint)trapret;
+
+  sp -= sizeof *np->context;
+  np->context = (struct context*)sp;
+  memset(np->context, 0, sizeof *np->context);
+  np->context->eip = (uint)forkret;
+
+  // Clear %eax so that clone returns 0 in the child.
+  np->tf->eax = 0;
+
+  for(i = 0; i < NOFILE; i++)
+    if(curproc->ofile[i])
+      np->ofile[i] = filedup(curproc->ofile[i]);
+  np->cwd = idup(curproc->cwd);
+
+  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+
+  pid = np->pid;
+
+  acquire(&ptable.lock);
+
+  np->state = RUNNABLE;
+
+  release(&ptable.lock);
+
+  return pid;
 }
 
 // Wait for a child thread to exit. Return the PID of the waited for child
