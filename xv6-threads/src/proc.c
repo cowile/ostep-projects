@@ -221,6 +221,21 @@ fork(void)
   return pid;
 }
 
+// Create a new thread. This is like fork function, but threads share the
+// address space of the parent. The child thread begins execution from func
+// using stack as the call stack.
+int clone(void (*func)(void *, void *), void *arg_1, void *arg_2, void *stack)
+{
+  return -1;
+}
+
+// Wait for a child thread to exit. Return the PID of the waited for child
+// or -1 if none exist.
+int join(void **stack)
+{
+  return -1;
+}
+
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
 // until its parent calls wait() to find out it exited.
