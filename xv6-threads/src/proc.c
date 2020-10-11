@@ -405,6 +405,8 @@ wait(void)
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->parent != curproc)
         continue;
+      if(p->pid != 1 && p->parent->pgdir == p->pgdir)
+        continue;
       havekids = 1;
       if(p->state == ZOMBIE){
         // Found one.
