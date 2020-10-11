@@ -39,3 +39,15 @@ void* memset(void*, int, uint);
 void* malloc(uint);
 void free(void*);
 int atoi(const char*);
+
+// thread library
+typedef struct ticket_lock {
+  uint ticket;
+  uint turn;
+} lock_t;
+
+void lock_init(lock_t *lock);
+void lock_acquire(lock_t *lock);
+void lock_release(lock_t *lock);
+int thread_create(void (*func)(void *, void *), void *arg_1, void *arg_2);
+int thread_join();
