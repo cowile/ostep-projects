@@ -15,12 +15,34 @@ sys_fork(void)
 
 int sys_clone(void)
 {
-  return -1;
+  void (*func)(void *, void *);
+  void *arg_1;
+  void *arg_2;
+  void *stack;
+
+  // normal pointers only need point to a single byte so size = 1
+  if(argptr(0, (char**)&func, 1) < 0)
+    return -1;
+  if(argptr(1, (char**)&arg_1, 1) < 0)
+    return -1;
+  if(argptr(2, (char**)&arg_2, 1) < 0)
+    return -1;
+  // stack should match kernel stack size
+  if(argptr(3, (char**)&stack, KSTACKSIZE) < 0)
+    return -1;
+
+  return clone(func, arg_1, arg_2, stack);
 }
 
 int sys_join(void)
 {
-  return -1;
+  void **stack;
+
+  // we don't what the pointer points to because we will overwrite so size = 0
+  if(argptr(0, (char**)&stack, 0) < 0)
+    return -1;
+
+  return join(stack);
 }
 
 int

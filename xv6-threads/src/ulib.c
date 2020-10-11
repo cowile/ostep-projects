@@ -119,11 +119,20 @@ void lock_release(lock_t *lock)
 
 int thread_create(void (*func)(void *, void *), void *arg_1, void *arg_2)
 {
-  return -1;
+  void *stack;
+
+  if((stack = malloc(0x1000)) == 0)
+     return -1;
+
+  return clone(func, arg_1, arg_2, stack);
 }
 
 int thread_join()
 {
-  return -1;
+  void *stack;
+  if(join(&stack) < 0)
+    return -1;
+  free(stack);
+  return 0;
 }
 
