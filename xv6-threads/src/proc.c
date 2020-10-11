@@ -243,7 +243,6 @@ int clone(void (*func)(void *, void *), void *arg_1, void *arg_2, void *stack)
   *np->tf = *curproc->tf;
 
   // Use user-allocated stack for kstack.
-  kfree(np->kstack);
   np->kstack = stack;
   sp = np->kstack + KSTACKSIZE;
 
