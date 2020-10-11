@@ -23,9 +23,10 @@ int sys_clone(void)
   // normal pointers only need point to a single byte so size = 1
   if(argptr(0, (char**)&func, 1) < 0)
     return -1;
-  if(argptr(1, (char**)&arg_1, 1) < 0)
+  // treat arguments as integers because test 1 expects it
+  if(argint(1, (int*)&arg_1) < 0)
     return -1;
-  if(argptr(2, (char**)&arg_2, 1) < 0)
+  if(argint(2, (int*)&arg_2) < 0)
     return -1;
   // stack should match kernel stack size
   if(argptr(3, (char**)&stack, KSTACKSIZE) < 0)
