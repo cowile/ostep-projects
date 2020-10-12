@@ -118,6 +118,17 @@ sti(void)
 }
 
 static inline uint
+fetch_and_add(volatile uint *addr, uint inc)
+{
+  asm volatile("lock; xaddl %0, %1"
+               : "+r" (inc), "+m" (*addr)
+               :
+               : "memory");
+
+  return inc;
+}
+
+static inline uint
 xchg(volatile uint *addr, uint newval)
 {
   uint result;

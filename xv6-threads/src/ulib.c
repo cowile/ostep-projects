@@ -112,10 +112,15 @@ void lock_init(lock_t *lock)
 }
 
 void lock_acquire(lock_t *lock)
-{}
+{
+  uint my_turn = fetch_and_add(&lock->ticket, 1);
+  while(my_turn != lock->turn);
+}
 
 void lock_release(lock_t *lock)
-{}
+{
+  fetch_and_add(&lock->turn, 1);
+}
 
 int thread_create(void (*func)(void *, void *), void *arg_1, void *arg_2)
 {
@@ -135,4 +140,3 @@ int thread_join()
   free(stack);
   return 0;
 }
-
