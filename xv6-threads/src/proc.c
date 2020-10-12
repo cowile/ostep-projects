@@ -226,17 +226,17 @@ fork(void)
 // using stack as the call stack.
 int clone(void (*func)(void *, void *), void *arg_1, void *arg_2, void *stack)
 {
-  int i, pid;
+  int pid;
   struct proc *np;
   struct proc *curproc = myproc();
-  char *sp;
+  uint *sp;
 
   // Allocate process.
   if((np = allocproc()) == 0){
     return -1;
   }
 
-  // Use the same memory space for child process.
+  // Copy info from parent.
   np->pgdir = curproc->pgdir;
   np->sz = curproc->sz;
   np->parent = curproc;
@@ -244,45 +244,24 @@ int clone(void (*func)(void *, void *), void *arg_1, void *arg_2, void *stack)
 
   // Use user-allocated stack for kstack.
   memset(stack, 0, KSTACKSIZE);
-  np->kstack = stack;
-  sp = np->kstack + KSTACKSIZE;
+  np->ustack = stack;
+  sp = stack + KSTACKSIZE;
 
   // Set up arguments for func using cdecl calling convention.
-  sp -= 4;
-  *(uint*)sp = (uint)arg_2;
-  sp -= 4;
-  *(uint*)sp = (uint)arg_1;
+  sp -= 1;
+  *sp = (uint)arg_2;
+  sp -= 1;
+  *sp = (uint)arg_1;
+  // Create dummy return pointer for func
+  sp -= 1;
+  *sp = 0xffffffff;
 
-  // Dummy return pointer for func
-  sp -= 4;
-  *(uint*)sp = (uint)-1;
+  // Set stack pointer to point to user stack.
+  np->tf->esp = (uint)sp;
+  // Set instruction pointer to begin execution at func.
+  np->tf->eip = (uint)func;
 
-  // Set up the stack so trapret returns into our user-defined fuction.
-  sp -= 4;
-  *(uint*)sp = (uint)func;
-
-  // Old base pointer is the very bottom of the stack.
-  sp -= 4;
-  *(uint*)sp = (uint)(np->kstack + KSTACKSIZE);
-
-  // Leave room for trap frame trapret arg 1
-  sp -= sizeof *np->tf;
-  np->tf = (struct trapframe*)sp;
-
-  // Set up new context to start executing at forkret,
-  // which returns to trapret.
-  sp -= 4;
-  *(uint*)sp = (uint)trapret;
-
-  sp -= sizeof *np->context;
-  np->context = (struct context*)sp;
-  memset(np->context, 0, sizeof *np->context);
-  np->context->eip = (uint)forkret;
-
-  // Clear %eax so that clone returns 0 in the child.
-  np->tf->eax = 0;
-
-  for(i = 0; i < NOFILE; i++)
+  for(uint i = 0; i < NOFILE; i++)
     if(curproc->ofile[i])
       np->ofile[i] = filedup(curproc->ofile[i]);
   np->cwd = idup(curproc->cwd);
@@ -305,23 +284,25 @@ int clone(void (*func)(void *, void *), void *arg_1, void *arg_2, void *stack)
 int join(void **stack)
 {
   struct proc *p;
-  int havekids, pid;
+  int havethreads, pid;
   struct proc *curproc = myproc();
 
   acquire(&ptable.lock);
   for(;;){
-    // Scan through table looking for exited children.
-    havekids = 0;
+    // Scan through table looking for exited threads.
+    havethreads = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->parent != curproc || p->parent->pgdir != curproc->pgdir)
+      if(p->pgdir != curproc->pgdir)
         continue;
-      havekids = 1;
+      havethreads = 1;
       if(p->state == ZOMBIE){
         // Found one.
+        *stack = p->ustack;
+        p->ustack = 0;
         pid = p->pid;
-        *stack = p->kstack;
+        kfree(p->kstack);
+        p->pgdir = 0;
         p->kstack = 0;
-        freevm(p->pgdir);
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
@@ -333,7 +314,7 @@ int join(void **stack)
     }
 
     // No point waiting if we don't have any children.
-    if(!havekids || curproc->killed){
+    if(!havethreads || curproc->killed){
       release(&ptable.lock);
       return -1;
     }
@@ -405,7 +386,7 @@ wait(void)
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->parent != curproc)
         continue;
-      if(p->pid != 1 && p->parent->pgdir == p->pgdir)
+      if(p->pgdir == curproc->pgdir)
         continue;
       havekids = 1;
       if(p->state == ZOMBIE){
