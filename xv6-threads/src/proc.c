@@ -243,6 +243,7 @@ int clone(void (*func)(void *, void *), void *arg_1, void *arg_2, void *stack)
   *np->tf = *curproc->tf;
 
   // Use user-allocated stack for kstack.
+  memset(stack, 0, KSTACKSIZE);
   np->kstack = stack;
   sp = np->kstack + KSTACKSIZE;
 
@@ -252,19 +253,19 @@ int clone(void (*func)(void *, void *), void *arg_1, void *arg_2, void *stack)
   sp -= 4;
   *(uint*)sp = (uint)arg_1;
 
-  // If func returns, the thread should exit and clean up the process.
+  // Dummy return pointer for func
   sp -= 4;
-  *(uint*)sp = (uint)&exit;
-
-  // Old base pointer is at the very bottom of the stack.
-  sp -= 4;
-  *(uint*)sp = (uint)(np->kstack + KSTACKSIZE);
+  *(uint*)sp = (uint)-1;
 
   // Set up the stack so trapret returns into our user-defined fuction.
   sp -= 4;
   *(uint*)sp = (uint)func;
 
-  // Leave room for trap frame.
+  // Old base pointer is the very bottom of the stack.
+  sp -= 4;
+  *(uint*)sp = (uint)(np->kstack + KSTACKSIZE);
+
+  // Leave room for trap frame trapret arg 1
   sp -= sizeof *np->tf;
   np->tf = (struct trapframe*)sp;
 
