@@ -111,11 +111,14 @@ void lock_init(lock_t *lock)
   lock->turn = 0;
 }
 
+#pragma GCC push_options
+#pragma GCC optimize ("O0")
 void lock_acquire(lock_t *lock)
 {
   uint my_turn = fetch_and_add(&lock->ticket, 1);
   while(my_turn != lock->turn);
 }
+#pragma GCC pop_options
 
 void lock_release(lock_t *lock)
 {

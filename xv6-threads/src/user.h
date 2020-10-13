@@ -42,8 +42,8 @@ int atoi(const char*);
 
 // thread library
 typedef struct ticket_lock {
-  uint ticket;
-  uint turn;
+  int ticket;
+  int turn;
 } lock_t;
 
 void lock_init(lock_t *lock);
