@@ -292,27 +292,24 @@ int join(void **stack)
     // Scan through table looking for exited threads.
     havethreads = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      // If (our child and a thread).
-      if(p->parent == curproc && p->pgdir == curproc->pgdir)
-      {
-        havethreads = 1;
-        if(p->state == ZOMBIE){
-          // Found one.
-          *stack = p->ustack;
-          p->ustack = 0;
-          pid = p->pid;
-          kfree(p->kstack);
-          p->kstack = 0;
-          p->pgdir = 0;
-          p->kstack = 0;
-          p->pid = 0;
-          p->parent = 0;
-          p->name[0] = 0;
-          p->killed = 0;
-          p->state = UNUSED;
-          release(&ptable.lock);
-          return pid;
-        }
+      if(p->pgdir != curproc->pgdir)
+        continue;
+      havethreads = 1;
+      if(p->state == ZOMBIE){
+        // Found one.
+        *stack = p->ustack;
+        p->ustack = 0;
+        pid = p->pid;
+        kfree(p->kstack);
+        p->pgdir = 0;
+        p->kstack = 0;
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->state = UNUSED;
+        release(&ptable.lock);
+        return pid;
       }
     }
 
@@ -392,26 +389,24 @@ wait(void)
     // Scan through table looking for exited children.
     havekids = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      // If (our child and not a thread)
-      if(!(p->parent == curproc && p->pgdir != curproc->pgdir))
-      {
-        havekids = 1;
-        if(p->state == ZOMBIE){
-          // Found one.
-          pid = p->pid;
-          kfree(p->kstack);
-          p->kstack = 0;
-          freevm(p->pgdir);
-          p->ustack = 0;
-          p->pgdir = 0;
-          p->pid = 0;
-          p->parent = 0;
-          p->name[0] = 0;
-          p->killed = 0;
-          p->state = UNUSED;
-          release(&ptable.lock);
-          return pid;
-        }
+      if(p->parent != curproc)
+        continue;
+      if(p->pgdir == curproc->pgdir)
+        continue;
+      havekids = 1;
+      if(p->state == ZOMBIE){
+        // Found one.
+        pid = p->pid;
+        kfree(p->kstack);
+        p->kstack = 0;
+        freevm(p->pgdir);
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->state = UNUSED;
+        release(&ptable.lock);
+        return pid;
       }
     }
 
