@@ -292,6 +292,8 @@ int join(void **stack)
     // Scan through table looking for exited threads.
     havethreads = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->parent != curproc)
+        continue;
       if(p->pgdir != curproc->pgdir)
         continue;
       havethreads = 1;
@@ -335,9 +337,10 @@ exit(void)
   int fd;
   void *stack;
 
-  // Join all child threads before exiting.
-  while(join(&stack) != -1)
-    free(stack);
+  // Join all child threads before exiting. Do not worry about freeing
+  // the user stack. It was allocated by the main thread, so will be
+  // cleaned up when that process is deallocated.
+  while(join(&stack) != -1);
 
   if(curproc == initproc)
     panic("init exiting");
