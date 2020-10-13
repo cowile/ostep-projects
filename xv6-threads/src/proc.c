@@ -336,6 +336,11 @@ exit(void)
   struct proc *curproc = myproc();
   struct proc *p;
   int fd;
+  void *stack;
+
+  // Join all child threads before exiting.
+  while(join(&stack) != -1)
+    free(stack);
 
   if(curproc == initproc)
     panic("init exiting");
