@@ -214,7 +214,7 @@ rsect(uint sec, void *buf)
     perror("lseek");
     exit(1);
   }
-  if(read(fsfd, buf, BSIZE) < 0){
+  if(read(fsfd, buf, BSIZE) != BSIZE){
     perror("read");
     exit(1);
   }
