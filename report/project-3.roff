@@ -32,31 +32,20 @@ Code Commentary
 .PP
 The most important change, the bedrock of this method, is a couple of additional lines in
 .CW exec .
-.CW Exec
+.CW exec
 is the system call in Xv6 and all Unix based operating systems that loads executable programs from files into memory and begins executing them.
-.CW Exec
+.CW exec
 works in tandem with
 .CW fork ,
 which creates a process by copying the current process.
-.CW Exec 's
+.CW exec 's
 workings can be roughly divided into reading the executable file, allocating memory for the executable code, copying the instructions to memory, and chaging the process state to run the newly loaded code. Supporting null pages requires a change to the memory allocation.
 .DS I
-diff --git a/xv6-null-pages/src/exec.c b/xv6-null-pages/src/exec.c
-index b40134f..9a5aaf1 100644
---- a/xv6-null-pages/src/exec.c
-+++ b/xv6-null-pages/src/exec.c
-@@ -40,6 +40,11 @@ exec(char *path, char **argv)
-
-   // Load program into memory.
-   sz = 0;
-+  // Allocate null pages.
-+  if((sz = allocuvm(pgdir, sz, USER_VA_START)) == 0)
-+    goto bad;
-+  // Make it inacceccible to users.
-+  clearpteu(pgdir, (char *)0);
-   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
-     if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
-       goto bad;
+  // Allocate null pages.
+  if((sz = allocuvm(pgdir, sz, USER_VA_START)) == 0)
+    goto bad;
+  // Make it inacceccible to users.
+  clearpteu(pgdir, (char *)0);
 .DE
 .PP
 These lines accomplish two things. The first is handled by
@@ -68,70 +57,16 @@ which clears the Page Table Entry User
 flag to prevent any user process from accessing it. Allocating a physical page that will hold no data is a bit wasteful, but it is the most convenient technique that requires the fewest changes to other parts of the code. It is the exact same method used further down in
 .CW exec
 to create a guard page preventing stack overflow.
-.PP
 .CW USER_VA_START
 is a newly created macro to mark where the user virtual address space starts. It is defined as the size of one page.
-.DS I
-diff --git a/xv6-null-pages/src/memlayout.h b/xv6-null-pages/src/memlayout.h
-index d1615f7..0b125f1 100644
---- a/xv6-null-pages/src/memlayout.h
-+++ b/xv6-null-pages/src/memlayout.h
-@@ -13,3 +13,5 @@
-
- #define V2P_WO(x) ((x) - KERNBASE)    // same as V2P, but without casts
- #define P2V_WO(x) ((x) + KERNBASE)    // same as P2V, but without casts
-+
-+#define USER_VA_START 0x1000
-.DE
 .PP
 Changing where executable code will be located in its virtual address space changes some assumptions elsewhere. The first is in the makefile that builds Xv6.
-.DS I
-diff --git a/xv6-null-pages/src/Makefile b/xv6-null-pages/src/Makefile
-index 59a6382..e40db1e 100644
---- a/xv6-null-pages/src/Makefile
-+++ b/xv6-null-pages/src/Makefile
-@@ -78,6 +78,7 @@ OBJCOPY = $(TOOLPREFIX)objcopy
- OBJDUMP = $(TOOLPREFIX)objdump
- CFLAGS = -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -fno-delete-null-pointer-checks -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer
- CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
-+CFLAGS += -fno-delete-null-pointer-checks
- ASFLAGS = -m32 -gdwarf-2 -Wa,-divide
- # FreeBSD ld wants ``elf_i386_fbsd''
- LDFLAGS += -m $(shell $(LD) -V | grep elf_i386 2>/dev/null | head -n 1)
-@@ -146,7 +147,7 @@ vectors.S: vectors.pl
- ULIB = ulib.o usys.o printf.o umalloc.o
-
- _%: %.o $(ULIB)
--	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^
-+	$(LD) $(LDFLAGS) -N -e main -Ttext 0x1000 -o $@ $^
- 	$(OBJDUMP) -S $@ > $*.asm
- 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $*.sym
-
-.DE
-.PP
 .CW -fno-delete-null-pointer-checks
 instructs the compiler not to help with null pointer checks so the change may be tested.
 .CW "-Ttext 0x1000"
 instructs the linker that executables will be loaded at address 0x1000, or 4096, exactly one page of memory above 0.
 .PP
-The second changed assumption is how the kernel validates pointers passed to system calls.
-.DS I
-diff --git a/xv6-null-pages/src/syscall.c b/xv6-null-pages/src/syscall.c
-index ee85261..df2b9c2 100644
---- a/xv6-null-pages/src/syscall.c
-+++ b/xv6-null-pages/src/syscall.c
-@@ -63,7 +63,7 @@ argptr(int n, char **pp, int size)
-
-   if(argint(n, &i) < 0)
-     return -1;
--  if(size < 0 || (uint)i >= curproc->sz || (uint)i+size > curproc->sz)
-+  if(size < 0 || (uint)i < USER_VA_START || (uint)i >= curproc->sz || (uint)i+size > curproc->sz)
-     return -1;
-   *pp = (char*)i;
-   return 0;
-.DE
-.PP
-The kernel must now ensure no pointer passed to a system call points to the null page. It checks for this by checking for any virtual address below
+The second changed assumption is how the kernel validates pointers passed to system calls. The kernel must now ensure no pointer passed to a system call points to the null page. It checks for this by checking for any virtual address below
 .CW USER_VA_START .
 .
 .
@@ -154,103 +89,9 @@ flag instead.
 .NH 2
 Code Commentary
 .PP
-To start, there are formalities to declare a new working system call.
-.DS I
-diff --git a/xv6-null-pages/src/defs.h b/xv6-null-pages/src/defs.h
-index 82fb982..5989da3 100644
---- a/xv6-null-pages/src/defs.h
-+++ b/xv6-null-pages/src/defs.h
-@@ -91,6 +91,10 @@ void            end_op();
- extern int      ismp;
- void            mpinit(void);
-
-+int            mprotect(void *addr, int len);
-+int            munprotect(void *addr, int len);
-+
- // picirq.c
- void            picenable(int);
- void            picinit(void);
-.DE
+To start, there are formalities to declare a new system call. New system calls must be added to defs.h, syscall.h, syscall.c, user.h, and usys.S. These changes are not interesting enough to include. They only involve declaring the system call in the right places and assigning it a unique number.
 .PP
-The above declares the new system calls. Each system call takes a page aligned address
-.CW addr
-and a number of pages
-.CW len
-to protect. Each system call returns 0 on success and -1 for failure.
-.DS I
-diff --git a/xv6-null-pages/src/syscall.c b/xv6-null-pages/src/syscall.c
-index ee85261..df2b9c2 100644
---- a/xv6-null-pages/src/syscall.c
-+++ b/xv6-null-pages/src/syscall.c
-@@ -103,6 +103,8 @@ extern int sys_unlink(void);
- extern int sys_wait(void);
- extern int sys_write(void);
- extern int sys_uptime(void);
-+extern int sys_mprotect(void);
-+extern int sys_munprotect(void);
-
- static int (*syscalls[])(void) = {
- [SYS_fork]    sys_fork,
-@@ -126,6 +128,8 @@ static int (*syscalls[])(void) = {
- [SYS_link]    sys_link,
- [SYS_mkdir]   sys_mkdir,
- [SYS_close]   sys_close,
-+[SYS_mprotect] sys_mprotect,
-+[SYS_munprotect] sys_munprotect,
- };
-
- void
-.DE
-.PP
-The above places each system call entry point into its appropriate slot in the global array
-.CW syscalls .
-.DS I
-diff --git a/xv6-null-pages/src/syscall.h b/xv6-null-pages/src/syscall.h
-index bc5f356..ef11022 100644
---- a/xv6-null-pages/src/syscall.h
-+++ b/xv6-null-pages/src/syscall.h
-@@ -20,3 +20,5 @@
- #define SYS_link   19
- #define SYS_mkdir  20
- #define SYS_close  21
-+#define SYS_mprotect 22
-+#define SYS_munprotect 23
-.DE
-.PP
-The above assigns unique numbers to our new syscalls.
-.DS I
-diff --git a/xv6-null-pages/src/user.h b/xv6-null-pages/src/user.h
-index 4f99c52..ce52277 100644
---- a/xv6-null-pages/src/user.h
-+++ b/xv6-null-pages/src/user.h
-@@ -23,6 +23,8 @@ int getpid(void);
- char* sbrk(int);
- int sleep(int);
- int uptime(void);
-+int mprotect(void *addr, int len);
-+int munprotect(void *addr, int len);
-
- // ulib.c
- int stat(const char*, struct stat*);
-diff --git a/xv6-null-pages/src/usys.S b/xv6-null-pages/src/usys.S
-index 8bfd8a1..42f7a42 100644
---- a/xv6-null-pages/src/usys.S
-+++ b/xv6-null-pages/src/usys.S
-@@ -29,3 +29,5 @@ SYSCALL(getpid)
- SYSCALL(sbrk)
- SYSCALL(sleep)
- SYSCALL(uptime)
-+SYSCALL(mprotect)
-+SYSCALL(munprotect)
-.DE
-.PP
-The above declares and defines our system calls for userspace. The macro
-.CW SYSCALL
-generates assembly that loads the appropriate system call number and issues the instruction
-.CW "int $64" ,
-which Xv6 has defined as the interrupt for system calls.
-.PP
-With that out of the way, what follows is the actual implementation. Both system calls where implemented in terms of a third, more general function called
+What follows is the actual implementation. Both system calls where implemented in terms of a third, more general function called
 .CW mmark ,
 which takes additional parameters and can set or clear any page flags. It iterates through the pages specified, looks up the page table entry of the virtual address using the function
 .CW walkpgdir ,
@@ -258,99 +99,47 @@ and if the page is present, it sets or clears the flags
 .CW flags
 depending on the value of
 .CW set .
-Further down, you can see this allows us to implement
+This allows us to implement
 .CW mprotect
 as
 .CW "mmark(addr, len, 0, PTE_W)"
 and
 .CW munprotect
-as "mmark(addr, len, 1, PTE_W)" .
+as
+.CW "mmark(addr, len, 1, PTE_W)" .
 After that, there is the additional work of defining the entry points
 .CW sys_mprotect
 and
 .CW sys_munprotect
-to validate the arguments passed in before giving them to the main functions.
+to validate the arguments passed in before giving them to the main functions. Argument validation is not included either since it is merely using the
+.CW argint
+and
+.CW argptr
+functions to validate each argument and return failure if any are invalid.
 .DS I
-diff --git a/xv6-null-pages/src/vm.c b/xv6-null-pages/src/vm.c
-index 7134cff..8495dc8 100644
---- a/xv6-null-pages/src/vm.c
-+++ b/xv6-null-pages/src/vm.c
-@@ -54,6 +54,75 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
-   return &pgtab[PTX(va)];
- }
+// mmark
+// Starting at addr, set len pages with the given permissions.
+int mmark(void *addr, int len, int set, int flag)
+{
+  struct proc *curproc = myproc();
+  pte_t *pgdir = curproc->pgdir;
+  pte_t *pgtab_ent;
 
-+// mmark
-+// Starting at addr, set len pages with the given permissions.
-+int mmark(void *addr, int len, int set, int flag)
-+{
-+  struct proc *curproc = myproc();
-+  pte_t *pgdir = curproc->pgdir;
-+  pte_t *pgtab_ent;
-nnn+
-+  for(int i = 0; i < len; i++)
-+  {
-+    if((pgtab_ent = walkpgdir(pgdir, addr + (i * PGSIZE), 0)) == 0)
-+      return -1;
-+    if((*pgtab_ent & PTE_P) == 0)
-+      return -1;
-+    if(set)
-+      *pgtab_ent = *pgtab_ent | flag;
-+    else
-+      *pgtab_ent = *pgtab_ent & ~flag;
-+  }
-+
-+  lcr3(V2P(pgdir));
-+  return 0;
-+}
-+
-+// mprotect
-+// Set pages read-only.
-+
-+int mprotect(void *addr, int len)
-+{
-+  return mmark(addr, len, 0, PTE_W);
-+}
-+
-+// munprotect
-+// Reverse mprotect.
-+int munprotect(void *addr, int len)
-+{
-+  return mmark(addr, len, 1, PTE_W);
-+}
-+
-+int sys_mprotect(void)
-+{
-+  char *addr;
-+  int len;
-+
-+  // Must hae positive len.
-+  if(argint(1, &len) < 0 || len <= 0)
-+    return -1;
-+  // len * PGSIZE is the size of memory we protect. Must be page aligned.
-+  if(argptr(0, &addr, len * PGSIZE) < 0 || (uint)addr % PGSIZE != 0)
-+    return -1;
-+  if(mprotect(addr, len))
-+    return -1;
-+  return 0;
-+}
-+
-+int sys_munprotect(void)
-+{
-+  char *addr;
-+  int len;
-+
-+  if(argint(1, &len) < 0 || len <= 0)
-+    return -1;
-+  if(argptr(0, &addr, len * PGSIZE) < 0 || (uint)addr % PGSIZE != 0)
-+    return -1;
-+  if(munprotect(addr, len))
-+    return -1;
-+  return 0;
-+}
-+
- // Create PTEs for virtual addresses starting at va that refer to
- // physical addresses starting at pa. va and size might not
- // be page-aligned.
+  for(int i = 0; i < len; i++)
+  {
+    if((pgtab_ent = walkpgdir(pgdir, addr + (i * PGSIZE), 0)) == 0)
+      return -1;
+    if((*pgtab_ent & PTE_P) == 0)
+      return -1;
+    if(set)
+      *pgtab_ent = *pgtab_ent | flag;
+    else
+      *pgtab_ent = *pgtab_ent & ~flag;
+  }
+
+  lcr3(V2P(pgdir));
+  return 0;
+}
 .DE
 .
 .
@@ -372,200 +161,47 @@ The former takes a user-defined function and arguments as well as a user-defined
 .NH 2
 Code Commentary
 .PP
-As before, there is the formality to define the new system calls.
-.DS I
-diff --git a/xv6-threads/src/defs.h b/xv6-threads/src/defs.h
-index 82fb982..bf26c98 100644
---- a/xv6-threads/src/defs.h
-+++ b/xv6-threads/src/defs.h
-@@ -120,6 +120,8 @@ void            userinit(void);
- int             wait(void);
- void            wakeup(void*);
- void            yield(void);
-+int             clone(void (*func)(void *, void *), void *arg_1, void *arg_2, void *stack);
-+int             join(void **stack);
-
- // swtch.S
- void            swtch(struct context**, struct context*);
-diff --git a/xv6-threads/src/syscall.c b/xv6-threads/src/syscall.c
-index ee85261..989d7cb 100644
---- a/xv6-threads/src/syscall.c
-+++ b/xv6-threads/src/syscall.c
-@@ -103,6 +103,8 @@ extern int sys_unlink(void);
- extern int sys_wait(void);
- extern int sys_write(void);
- extern int sys_uptime(void);
-+extern int sys_clone(void);
-+extern int sys_join(void);
-
- static int (*syscalls[])(void) = {
- [SYS_fork]    sys_fork,
-@@ -126,6 +128,8 @@ static int (*syscalls[])(void) = {
- [SYS_link]    sys_link,
- [SYS_mkdir]   sys_mkdir,
- [SYS_close]   sys_close,
-+[SYS_clone]   sys_clone,
-+[SYS_join]    sys_join,
- };
-
- void
-diff --git a/xv6-threads/src/syscall.h b/xv6-threads/src/syscall.h
-index bc5f356..6b757d1 100644
---- a/xv6-threads/src/syscall.h
-+++ b/xv6-threads/src/syscall.h
-@@ -20,3 +20,5 @@
- #define SYS_link   19
- #define SYS_mkdir  20
- #define SYS_close  21
-+#define SYS_clone  22
-+#define SYS_join   23
-diff --git a/xv6-threads/src/usys.S b/xv6-threads/src/usys.S
-index 8bfd8a1..77fac40 100644
---- a/xv6-threads/src/usys.S
-+++ b/xv6-threads/src/usys.S
-@@ -29,3 +29,5 @@ SYSCALL(getpid)
- SYSCALL(sbrk)
- SYSCALL(sleep)
- SYSCALL(uptime)
-+SYSCALL(clone)
-+SYSCALL(join)
-diff --git a/xv6-threads/src/x86.h b/xv6-threads/src/x86.h
-.DE
-.PP
-.CW Clone
+.CW clone
 is mostly a copy of
 .CW fork .
-It allocates a new process and copies information from the parent. The first important distinction that makes this a thread is that it shares the address space with the parent. It makes a shallow copy of
+It allocates a new process and copies information from the parent. The first distinction that makes this a thread is that it shares the address space with the parent. It makes a shallow copy of
 .CW pgdir ,
-only copying the pointer instead of the underlying structure. The second important distinction is that it starts execution for a user-provided function and arguments. The stack needs to be set up according to the x86 calling convention to support accessing the arguments and the process context must appropriately set the stack and instruction registers to start execution from the right place.
+only copying the pointer instead of the underlying structure. The second distinction is that it starts execution for a user-provided function and arguments. The stack needs to be set up according to the x86 calling convention to support accessing the arguments and the process context must appropriately set the stack and instruction registers to start execution from the right place. The code below only shows these differences.
+.DS I
+  // Use user-allocated stack for kstack.
+  memset(stack, 0, KSTACKSIZE);
+  np->ustack = stack;
+  sp = stack + KSTACKSIZE;
+
+  // Set up arguments for func using cdecl calling convention.
+  sp -= 1;
+  *sp = (uint)arg_2;
+  sp -= 1;
+  *sp = (uint)arg_1;
+  // Create dummy return pointer for func
+  sp -= 1;
+  *sp = 0xffffffff;
+
+  // Set stack pointer to point to user stack.
+  np->tf->esp = (uint)sp;
+  // Set instruction pointer to begin execution at func.
+  np->tf->eip = (uint)func;
+.DE
 .PP
-.CW Join
+.CW join
 is mostly a copy of
 .CW wait .
 It scans the process table looking for child processes and deallocates them if they have exited. An exited process is indicated by the
 .CW ZOMBIE
-state. The first important distinction is to only act on threads, so there is an additional check to ensure the parent and child process have the same page directory. The second important distinction is that the page directory should not be freed with the
+state. The first distinction is to only act on threads, so there is an additional check to ensure the parent and child process have the same page directory. The second distinction is that the page directory should not be freed with the
 .CW freevm
-function because multiple other processes may still be using it. In addition, a variable named
-.CW ustack
-was added to the process structure to support tracking the starting address of the user-allocated stack.
+function because multiple other processes may still be using it. The code below only shows these differences.
 .DS I
-diff --git a/xv6-threads/src/proc.c b/xv6-threads/src/proc.c
-index 806b1b1..b976dd4 100644
---- a/xv6-threads/src/proc.c
-+++ b/xv6-threads/src/proc.c
-@@ -221,6 +221,111 @@ fork(void)
-   return pid;
- }
-
-+// Create a new thread. This is like fork function, but threads share the
-+// address space of the parent. The child thread begins execution from func
-+// using stack as the call stack.
-+int clone(void (*func)(void *, void *), void *arg_1, void *arg_2, void *stack)
-+{
-+  int pid;
-+  struct proc *np;
-+  struct proc *curproc = myproc();
-+  uint *sp;
-+
-+  // Allocate process.
-+  if((np = allocproc()) == 0){
-+    return -1;
-+  }
-+
-+  // Copy info from parent.
-+  np->pgdir = curproc->pgdir;
-+  np->sz = curproc->sz;
-+  np->parent = curproc;
-+  *np->tf = *curproc->tf;
-+
-+  // Use user-allocated stack for kstack.
-+  memset(stack, 0, KSTACKSIZE);
-+  np->ustack = stack;
-+  sp = stack + KSTACKSIZE;
-+
-+  // Set up arguments for func using cdecl calling convention.
-+  sp -= 1;
-+  *sp = (uint)arg_2;
-+  sp -= 1;
-+  *sp = (uint)arg_1;
-+  // Create dummy return pointer for func
-+  sp -= 1;
-+  *sp = 0xffffffff;
-+
-+  // Set stack pointer to point to user stack.
-+  np->tf->esp = (uint)sp;
-+  // Set instruction pointer to begin execution at func.
-+  np->tf->eip = (uint)func;
-+
-+  for(uint i = 0; i < NOFILE; i++)
-+    if(curproc->ofile[i])
-+      np->ofile[i] = filedup(curproc->ofile[i]);
-+  np->cwd = idup(curproc->cwd);
-+
-+  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
-+
-+  pid = np->pid;
-+
-+  acquire(&ptable.lock);
-+
-+  np->state = RUNNABLE;
-+
-+  release(&ptable.lock);
-+
-+  return pid;
-+}
-+
-+// Wait for a child thread to exit. Return the PID of the waited for child
-+// or -1 if none exist.
-+int join(void **stack)
-+{
-+  struct proc *p;
-+  int havethreads, pid;
-+  struct proc *curproc = myproc();
-+
-+  acquire(&ptable.lock);
-+  for(;;){
-+    // Scan through table looking for exited threads.
-+    havethreads = 0;
-+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-+      if(p->parent != curproc)
-+        continue;
-+      if(p->pgdir != curproc->pgdir)
-+        continue;
-+      havethreads = 1;
-+      if(p->state == ZOMBIE){
-+        // Found one.
-+        *stack = p->ustack;
-+        p->ustack = 0;
-+        pid = p->pid;
-+        kfree(p->kstack);
-+        p->pgdir = 0;
-+        p->kstack = 0;
-+        p->pid = 0;
-+        p->parent = 0;
-+        p->name[0] = 0;
-+        p->killed = 0;
-+        p->state = UNUSED;
-+        release(&ptable.lock);
-+        return pid;
-+      }
-+    }
-+
-+    // No point waiting if we don't have any children.
-+    if(!havethreads || curproc->killed){
-+      release(&ptable.lock);
-+      return -1;
-+    }
-+
-+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
-+    sleep(curproc, &ptable.lock);  //DOC: wait-sleep
-+  }
-+}
-+
- // Exit the current process.  Does not return.
- // An exited process remains in the zombie state
- // until its parent calls wait() to find out it exited.
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->parent != curproc)
+        continue;
+      if(p->pgdir != curproc->pgdir)
+        continue;
 .DE
 .PP
 The existence of threads must now be considered in other process handling functions. The first is
@@ -573,34 +209,6 @@ The existence of threads must now be considered in other process handling functi
 which must now force a process to join all of its child threads before finishing. The second is
 .CW wait ,
 which should act only on child processes that are not child threads.
-.DS I
-diff --git a/xv6-threads/src/proc.c b/xv6-threads/src/proc.c
-index 806b1b1..b976dd4 100644
---- a/xv6-threads/src/proc.c
-+++ b/xv6-threads/src/proc.c
-@@ -230,6 +335,12 @@ exit(void)
-   struct proc *curproc = myproc();
-   struct proc *p;
-   int fd;
-+  void *stack;
-+
-+  // Join all child threads before exiting. Do not worry about freeing
-+  // the user stack. It was allocated by the main thread, so will be
-+  // cleaned up when that process is deallocated.
-+  while(join(&stack) != -1);
-
-   if(curproc == initproc)
-     panic("init exiting");
-@@ -283,6 +394,8 @@ wait(void)
-     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-       if(p->parent != curproc)
-         continue;
-+      if(p->pgdir == curproc->pgdir)
-+        continue;
-       havekids = 1;
-       if(p->state == ZOMBIE){
-         // Found one.
-.DE
 .
 .
 .
@@ -628,57 +236,21 @@ implementing a simple ticket lock using an underlying atomic fetch-and-add opera
 .NH 2
 Code Commentary
 .PP
-Define the lock structure and functions for this section.
-.DS I
-diff --git a/xv6-threads/src/user.h b/xv6-threads/src/user.h
-index 4f99c52..322024e 100644
---- a/xv6-threads/src/user.h
-+++ b/xv6-threads/src/user.h
-@@ -37,3 +39,15 @@ void* memset(void*, int, uint);
- void* malloc(uint);
- void free(void*);
- int atoi(const char*);
-+
-+// thread library
-+typedef struct ticket_lock {
-+  int ticket;
-+  int turn;
-+} lock_t;
-+
-+void lock_init(lock_t *lock);
-+void lock_acquire(lock_t *lock);
-+void lock_release(lock_t *lock);
-+int thread_create(void (*func)(void *, void *), void *arg_1, void *arg_2);
-+int thread_join();
-.DE
-.PP
 Because locks require atomic operations to operate correctly, define this using inline assembly with
 .CW xaddl ,
 the x86 instruction that implements fetch-and-add. This implementation was copied from an external link mentioned in the comments.
 .DS I
-diff --git a/xv6-threads/src/x86.h b/xv6-threads/src/x86.h
-index 07312a5..3e54c13 100644
---- a/xv6-threads/src/x86.h
-+++ b/xv6-threads/src/x86.h
-@@ -117,6 +117,18 @@ sti(void)
-   asm volatile("sti");
- }
-
-+// Copied directly from https://en.wikipedia.org/wiki/Fetch-and-add
-+static inline int
-+fetch_and_add(int *variable, int value)
-+{
-+  __asm__ volatile("lock; xaddl %0, %1"
-+                   : "+r" (value), "+m" (*variable) // input+output
-+                   : // No input-only
-+                   : "memory"
-+    );
-+  return value;
-+}
-+
- static inline uint
- xchg(volatile uint *addr, uint newval)
- {
+// Copied directly from https://en.wikipedia.org/wiki/Fetch-and-add
+static inline int
+fetch_and_add(int *variable, int value)
+{
+  __asm__ volatile("lock; xaddl %0, %1"
+                   : "+r" (value), "+m" (*variable) // input+output
+                   : // No input-only
+                   : "memory"
+    );
+  return value;
+}
 .DE
 .PP
 With the underlying infrastructure in place, the implementation of the user functions are almost self-explanatory. However, it is important that optimizations be disabled for
@@ -686,53 +258,3 @@ With the underlying infrastructure in place, the implementation of the user func
 otherwise checking
 .CW lock->turn
 on each iteration of the loop will be optimized out and a thread will get stuck in an infinite loop.
-.DS I
-diff --git a/xv6-threads/src/ulib.c b/xv6-threads/src/ulib.c
-index 8e1e1a2..3e3cb12 100644
---- a/xv6-threads/src/ulib.c
-+++ b/xv6-threads/src/ulib.c
-@@ -104,3 +104,43 @@ memmove(void *vdst, const void *vsrc, int n)
-     *dst++ = *src++;
-   return vdst;
- }
-+
-+void lock_init(lock_t *lock)
-+{
-+  lock->ticket = 0;
-+  lock->turn = 0;
-+}
-+
-+#pragma GCC push_options
-+#pragma GCC optimize ("O0")
-+void lock_acquire(lock_t *lock)
-+{
-+  uint my_turn = fetch_and_add(&lock->ticket, 1);
-+  while(my_turn != lock->turn);
-+}
-+#pragma GCC pop_options
-+
-+void lock_release(lock_t *lock)
-+{
-+  fetch_and_add(&lock->turn, 1);
-+}
-+
-+int thread_create(void (*func)(void *, void *), void *arg_1, void *arg_2)
-+{
-+  void *stack;
-+
-+  if((stack = malloc(0x1000)) == 0)
-+     return -1;
-+
-+  return clone(func, arg_1, arg_2, stack);
-+}
-+
-+int thread_join()
-+{
-+  void *stack;
-+  int pid;
-+  if((pid = join(&stack)) < 0)
-+    return -1;
-+  free(stack);
-+  return pid;
-+}
-.DE
