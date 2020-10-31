@@ -90,22 +90,20 @@ sys_uptime(void)
   return xticks;
 }
 
-int
+void *
 sys_kmalloc(void)
 {
   int n;
   if(argint(0, &n) < 0)
-    return -1;
-  kmalloc(n);
-  return 0;
+    return 0;
+  return kmalloc(n);
 }
 
-int
+void
 sys_kmfree(void)
 {
   char *p;
   if(argptr(0, &p, 0) < 0)
-    return -1;
+    return;
   kmfree(p);
-  return 0;
 }
