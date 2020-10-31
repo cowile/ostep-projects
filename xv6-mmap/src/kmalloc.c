@@ -1,4 +1,5 @@
 #include "types.h"
+#include "mmu.h"
 #include "defs.h"
 
 // Memory allocator by Kernighan and Ritchie,
@@ -64,6 +65,8 @@ kmalloc(uint nbytes)
   Header *p, *prevp;
   uint nunits;
 
+  if(nbytes > PGSIZE - sizeof(Header))
+    panic("Requested too much memory");
   nunits = (nbytes + sizeof(Header) - 1)/sizeof(Header) + 1;
   if((prevp = freep) == 0){
     base.s.ptr = freep = prevp = &base;
