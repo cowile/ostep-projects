@@ -22,3 +22,5 @@
 #define SYS_close  21
 #define SYS_kmalloc 22
 #define SYS_kmfree 23
+#define SYS_mmap 24
+#define SYS_munmap 25

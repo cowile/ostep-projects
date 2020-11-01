@@ -125,6 +125,9 @@ int             wait(void);
 void            wakeup(void*);
 void            yield(void);
 
+void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset);
+int munmap(void *addr, uint length);
+
 // swtch.S
 void            swtch(struct context**, struct context*);
 

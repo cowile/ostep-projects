@@ -25,6 +25,8 @@ int sleep(int);
 int uptime(void);
 void *kmalloc(int);
 void kmfree(char*);
+void *mmap(void*, uint, int, int, int, int);
+int munmap(void*, uint);
 
 // ulib.c
 int stat(const char*, struct stat*);
