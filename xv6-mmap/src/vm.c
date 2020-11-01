@@ -284,6 +284,21 @@ void
 freevm(pde_t *pgdir)
 {
   uint i;
+  struct proc *curproc = myproc();
+  struct memory_region *map = curproc->map;
+  struct memory_region *reg;
+
+  while(map != 0)
+  {
+    reg = map;
+    memset(reg->addr, 0, reg->length);
+    deallocuvm(reg->addr, curproc->sz, curproc->sz - reg->length);
+    curproc->sz = curproc->sz - reg->length;
+    kmfree(reg);
+    map = map->next;
+  }
+
+  curproc->map = 0;
 
   if(pgdir == 0)
     panic("freevm: no pgdir");
@@ -391,4 +406,3 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 // Blank page.
 //PAGEBREAK!
 // Blank page.
-

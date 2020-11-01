@@ -32,6 +32,17 @@ struct context {
   uint eip;
 };
 
+enum memory_type { ANONYMOUS, FILE };
+
+struct memory_region {
+  void *addr;
+  uint length;
+  enum memory_type mt;
+  uint offset;
+  int fd;
+  struct memory_region *next;
+};
+
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Per-process state
@@ -48,6 +59,7 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
+  struct memory_region *map;
   char name[16];               // Process name (debugging)
 };
 

@@ -449,10 +449,28 @@ sys_pipe(void)
 // data structure.
 void *sys_mmap(void)
 {
-  return 0;
+  // We can't use argptr because addr is only advisory and can by
+  // anything.
+  int addr;
+  int length;
+
+  if(argint(0, &addr) < 0 || argint(1, &length) < 0)
+    return 0;
+
+  // Last four arguments are not yet implemented and have no effect.
+  return mmap((void *)addr, (uint)length, 0, 0, -1, 0);
 }
 
 int sys_munmap(void)
 {
-  return -1;
+  // We can't use argptr because addr is only advisory and can by
+  // anything.
+  int addr;
+  int length;
+
+  if(argint(0, &addr) < 0 || argint(1, &length) < 0)
+    return -1;
+
+  // Last four arguments are not yet implemented and have no effect.
+  return munmap((void *)addr, (uint)length);
 }

@@ -88,6 +88,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->map = 0;
 
   release(&ptable.lock);
 
@@ -533,12 +534,57 @@ procdump(void)
   }
 }
 
+// Last four arguments are ignored right now.
+// Ignore the hint addr entirely. "may or may not" means code can do either.
 void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
 {
-  return 0;
+  struct proc *curproc = myproc();
+  uint old_sz = curproc->sz;
+  uint new_sz = old_sz + length;
+  pde_t *pgdir = curproc->pgdir;
+  struct memory_region *map = curproc->map;
+  struct memory_region *new_reg;
+
+  // Allocuvm memsets new pages to 0.
+  if(allocuvm(pgdir, old_sz, new_sz) == 0)
+    return 0;
+  if((new_reg = kmalloc(sizeof(struct memory_region))) == 0)
+    return 0;
+
+  new_reg->addr = (void *)PGROUNDUP(old_sz);
+  new_reg->length = length;
+  new_reg->mt = ANONYMOUS;
+  new_reg->offset = 0;
+  new_reg->fd = -1;
+  new_reg->next = map;
+
+  curproc->map = new_reg;
+
+  return new_reg->addr;
 }
 
 int munmap(void *addr, uint length)
 {
+  struct proc *curproc = myproc();
+  struct memory_region **map = &curproc->map;
+  struct memory_region *reg;
+  uint old_sz = curproc->sz;
+  uint new_sz = old_sz - length;
+
+  while(*map != 0)
+  {
+    reg = *map;
+    if(reg != 0 && reg->addr == addr && reg->length == length)
+    {
+      *map = reg->next;
+      memset(addr, 0, length);
+      deallocuvm(addr, old_sz, new_sz);
+      curproc->sz = new_sz;
+      kmfree(reg);
+      return 0;
+    }
+    map = &((*map)->next);
+  }
+
   return -1;
 }
