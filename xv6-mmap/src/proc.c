@@ -559,6 +559,7 @@ void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
   new_reg->next = map;
 
   curproc->map = new_reg;
+  curproc->sz = new_sz;
 
   return new_reg->addr;
 }
