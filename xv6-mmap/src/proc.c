@@ -583,7 +583,7 @@ int munmap(void *addr, uint length)
     {
       *map = reg->next;
       memset(addr, 0, length);
-      deallocuvm(addr, old_sz, new_sz);
+      deallocuvm(curproc->pgdir, old_sz, new_sz);
       kmfree(reg);
       curproc->sz = new_sz;
       /* lcr3(V2P(curproc->pgdir)); */

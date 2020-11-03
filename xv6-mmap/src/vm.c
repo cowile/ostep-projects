@@ -292,7 +292,7 @@ freevm(pde_t *pgdir)
   {
     reg = map;
     memset(reg->addr, 0, reg->length);
-    deallocuvm(reg->addr, curproc->sz, curproc->sz - reg->length);
+    deallocuvm(curproc->pgdir, curproc->sz, curproc->sz - reg->length);
     curproc->sz = curproc->sz - reg->length;
     kmfree(reg);
     map = map->next;
