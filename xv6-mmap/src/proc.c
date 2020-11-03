@@ -549,9 +549,12 @@ void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
   if(allocuvm(pgdir, old_sz, new_sz) == 0)
     return 0;
   if((new_reg = kmalloc(sizeof(struct memory_region))) == 0)
+  {
+    deallocuvm(pgdir, new_sz, old_sz);
     return 0;
+  }
 
-  new_reg->addr = (void *)PGROUNDUP(old_sz);
+  new_reg->addr = (void *)old_sz;
   new_reg->length = length;
   new_reg->mt = ANONYMOUS;
   new_reg->offset = 0;
@@ -560,6 +563,7 @@ void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
 
   curproc->map = new_reg;
   curproc->sz = new_sz;
+  /* lcr3(V2P(curproc->pgdir)); */
 
   return new_reg->addr;
 }
@@ -580,8 +584,9 @@ int munmap(void *addr, uint length)
       *map = reg->next;
       memset(addr, 0, length);
       deallocuvm(addr, old_sz, new_sz);
-      curproc->sz = new_sz;
       kmfree(reg);
+      curproc->sz = new_sz;
+      /* lcr3(V2P(curproc->pgdir)); */
       return 0;
     }
     map = &((*map)->next);
