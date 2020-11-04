@@ -539,31 +539,31 @@ procdump(void)
 void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
 {
   struct proc *curproc = myproc();
-  uint old_sz = curproc->sz;
-  uint new_sz = old_sz + length;
+  uint start_addr = curproc->sz;
+  uint pg_len = PGROUNDUP(length);
+  uint end_addr = start_addr + pg_len;
   pde_t *pgdir = curproc->pgdir;
   struct memory_region *map = curproc->map;
   struct memory_region *new_reg;
 
   // Allocuvm memsets new pages to 0.
-  if(allocuvm(pgdir, old_sz, new_sz) == 0)
+  if(allocuvm(pgdir, start_addr, end_addr) == 0)
     return 0;
   if((new_reg = kmalloc(sizeof(struct memory_region))) == 0)
   {
-    deallocuvm(pgdir, new_sz, old_sz);
+    deallocuvm(pgdir, start_addr, end_addr);
     return 0;
   }
 
-  new_reg->addr = (void *)old_sz;
-  new_reg->length = length;
+  new_reg->addr = (void *)start_addr;
+  new_reg->length = pg_len;
   new_reg->mt = ANONYMOUS;
   new_reg->offset = 0;
   new_reg->fd = -1;
   new_reg->next = map;
 
   curproc->map = new_reg;
-  curproc->sz = new_sz;
-  /* lcr3(V2P(curproc->pgdir)); */
+  curproc->sz = end_addr;
 
   return new_reg->addr;
 }
@@ -573,20 +573,24 @@ int munmap(void *addr, uint length)
   struct proc *curproc = myproc();
   struct memory_region **map = &curproc->map;
   struct memory_region *reg;
-  uint old_sz = curproc->sz;
-  uint new_sz = old_sz - length;
+  uint start_addr = (uint)addr;
+  uint pg_len = PGROUNDUP(length);
+  uint end_addr = start_addr + pg_len;
 
   while(*map != 0)
   {
     reg = *map;
-    if(reg != 0 && reg->addr == addr && reg->length == length)
+    if(reg != 0 && reg->addr == addr)
     {
       *map = reg->next;
-      memset(addr, 0, length);
-      deallocuvm(curproc->pgdir, old_sz, new_sz);
+      memset((void *)start_addr, 0, pg_len);
+      deallocuvm(curproc->pgdir, end_addr, start_addr);
       kmfree(reg);
-      curproc->sz = new_sz;
-      /* lcr3(V2P(curproc->pgdir)); */
+      // Because curproc->sz is not updated when deallocating, virtual
+      // address space is never reclaimed. This is wasteful, but
+      // preserves the property that curproc->sz gives an
+      // unmapped address no matter the sequence of mmap and munmap.
+      /* curproc->sz = new_sz; */
       return 0;
     }
     map = &((*map)->next);
