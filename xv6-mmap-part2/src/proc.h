@@ -33,11 +33,15 @@ struct context {
 };
 
 enum memory_type { ANONYMOUS, FILE };
+enum memory_prot {
+  PROT_WRITE = 0x1,
+};
 
 struct memory_region {
   void *addr;
   uint length;
   enum memory_type mt;
+  int mp;
   uint offset;
   int fd;
   struct memory_region *next;

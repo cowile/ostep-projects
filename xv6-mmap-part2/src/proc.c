@@ -558,6 +558,7 @@ void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
   new_reg->addr = (void *)start_addr;
   new_reg->length = pg_len;
   new_reg->mt = ANONYMOUS;
+  new_reg->mp = prot;
   new_reg->offset = 0;
   new_reg->fd = -1;
   new_reg->next = map;
@@ -583,7 +584,9 @@ int munmap(void *addr, uint length)
     if(reg != 0 && reg->addr == addr)
     {
       *map = reg->next;
-      memset((void *)start_addr, 0, pg_len);
+      // We can't memset here after using lazy allocation because our
+      // region may now include pages that were never mapped.
+      /* memset((void *)start_addr, 0, pg_len); */
       deallocuvm(curproc->pgdir, end_addr, start_addr);
       kmfree(reg);
       // Because curproc->sz is not updated when deallocating, virtual
