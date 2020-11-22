@@ -179,6 +179,8 @@ void            uartintr(void);
 void            uartputc(int);
 
 // vm.c
+typedef unsigned int pte_t;
+pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc);
 int mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
 void            seginit(void);
 void            kvmalloc(void);
