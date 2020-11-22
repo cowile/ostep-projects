@@ -64,6 +64,8 @@ static int pagefault_handler(struct trapframe *tf)
         kfree(mem);
         return -1;
       }
+
+      memset(start_addr, 0, PGSIZE);
       return 0;
     }
 
