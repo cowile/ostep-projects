@@ -534,7 +534,6 @@ procdump(void)
   }
 }
 
-// Last four arguments are ignored right now.
 // Ignore the hint addr entirely. "may or may not" means code can do either.
 void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
 {

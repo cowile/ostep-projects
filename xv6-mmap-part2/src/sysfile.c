@@ -453,12 +453,20 @@ void *sys_mmap(void)
   // anything.
   int addr;
   int length;
+  int prot;
+  int flags;
+  int fd;
+  int offset;
 
-  if(argint(0, &addr) < 0 || argint(1, &length) < 0)
+  if(argint(0, &addr) < 0
+     || argint(1, &length) < 0
+     || argint(2, &prot) < 0
+     || argint(3, &flags) < 0
+     || argint(4, &fd) < 0
+     || argint(5, &offset) < 0)
     return 0;
 
-  // Last four arguments are not yet implemented and have no effect.
-  return mmap((void *)addr, (uint)length, 0, 0, -1, 0);
+  return mmap((void *)addr, (uint)length, prot, flags, fd, offset);
 }
 
 int sys_munmap(void)
