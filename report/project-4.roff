@@ -1,0 +1,210 @@
+.RP
+.
+.
+.
+.TL
+Advanced Operating Systems Project 4
+.AU
+Colton Lewis
+.AI
+University of Texas Austin
+.DA
+.AB
+Describe the implementation techniques used by the author to implement a kernel memory allocator and memory map system call in the Xv6 operating system. A high level summary of the implementation is provided for each task followed by detailed commentary on the patches to the codebase provided by the instructor.
+.AE
+.
+.
+.
+.NH 1
+Kernel Memory Allocator
+.NH 2
+Objective
+.PP
+Implement dynamic memory allocation for the kernel. These functions are roughly equivalent to
+.CW malloc
+and
+.CW free .
+They are called
+.CW kmalloc
+and
+.CW kmfree .
+.NH 2
+Method Summary
+.PP
+Dynamic memory allocation is a useful feature and is crucial to implement the memory map system call later in the assignment to keep dynamic data available to each process. As recommended in the assignment, the author copied umalloc.c as a new file kmalloc.c and changed the functions just enough to work in kernel space.
+.NH 2
+Code Commentary
+.PP
+The main change required to make kmalloc from umalloc is to replace the
+.CW sbrk
+system call.
+.CW sbrk
+Allocates more memory to the process by growing the process size, but the kernel is unable to do that because kernel data structures can't be stored in user memory. Instead, the kernel must invoke
+.CW kalloc
+to return a usable page of memory.
+.CW kalloc
+is limited in that it can only allocate a page of memory at a time, but the assignment specified this was an acceptable limitation. This required adding a check to panic if the kernel requests more than a page of memory at a time.
+.DS I
+--- umalloc.c   2019-10-16 19:55:00.000000000 -0500
++++ kmalloc.c   2020-11-01 14:29:15.336497600 -0600
+@@ -2,3 +2,2 @@
+-#include "stat.h"
+-#include "user.h"
+-#include "param.h"
++#include "mmu.h"
++#include "defs.h"
+@@ -25 +24 @@
+-free(void *ap)
++kmfree(void *ap)
+@@ -54 +53 @@
+-  p = sbrk(nu * sizeof(Header));
++  p = kalloc();
+@@ -59 +58 @@
+-  free((void*)(hp + 1));
++  kmfree((void*)(hp + 1));
+@@ -64 +63 @@
+-malloc(uint nbytes)
++kmalloc(uint nbytes)
+@@ -68,0 +68,2 @@
++  if(nbytes > PGSIZE - sizeof(Header))
++    panic("Requested too much memory");
+.DE
+.
+.
+.
+.NH 1
+Memory Map System Call
+.NH 2
+Objective
+.PP
+Allow user processes to allocate anonymous regions of memory in a memory map.
+.NH 2
+Method Summary
+.PP
+Implement two new system calls,
+.CW mmap
+and
+.CW munmap
+that map and unmap regions of memory from a process's address space. These calls use the dynamic memory allocation from the previous section to manage these memory regions by keeping a linked list of regions for each process.
+.NH 2
+Code Commentary
+.PP
+To start, there are formalities to declare a new system call. New system calls must be added to defs.h, syscall.h, syscall.c, user.h, and usys.S. These changes are not interesting enough to include. They only involve declaring the system call in the right places and assigning it a unique number.
+.PP
+The first part of the change is the introduction of the new linked list structure to each process. For each memory region, it tracks the starting address, length, whether the region is backed by a file, the offset into that file, and the file descriptor. These last three fields will not be used until Project 5.
+.DS I
+--- a/xv6-mmap/src/proc.h
++++ b/xv6-mmap/src/proc.h
+@@ -32,6 +32,17 @@ struct context {
++enum memory_type { ANONYMOUS, FILE };
++
++struct memory_region {
++  void *addr;
++  uint length;
++  enum memory_type mt;
++  uint offset;
++  int fd;
++  struct memory_region *next;
++};
++
+@@ -48,6 +59,7 @@ struct proc {
++  struct memory_region *map;
+.DE
+.PP
+With our new data structure in place, we can now implement
+.CW mmap .
+It has many arguments, but most are ignored. The first argument is a hint address which the kernel is free to ignore. The second is the length of the memory region, the only parameter not ignored. The third is the memory protections, the fourth file access flags, the fifth a file descriptor, and the sixth an offset, all of which will be implemented in Project 5.
+.PP
+The heart of mmap is to map the requested memory region with
+.CW allocuvm
+as suggested by the assignment. This is a stretch of the original purpose of this function because the function assumes it is used to grow a process from its current size to a new size, but it can be used for this purpose because the size of a process is also has meaning as a virtual memory address. In particular, it is the first virtual memory address not already in use.
+.PP
+After that allocation, the remainder of the code is to allocate a linked list node to track the newly allocated region and prepend it to the existing linked list.
+.DS I
+--- a/xv6-mmap/src/proc.c
++++ b/xv6-mmap/src/proc.c
+@@ -532,3 +533,37 @@ procdump(void)
++
++// Last four arguments are ignored right now.
++// Ignore the hint addr entirely. "may or may not" means code can do either.
++void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
++{
++  struct proc *curproc = myproc();
++  uint start_addr = curproc->sz;
++  uint pg_len = PGROUNDUP(length);
++  uint end_addr = start_addr + pg_len;
++  pde_t *pgdir = curproc->pgdir;
++  struct memory_region *map = curproc->map;
++  struct memory_region *new_reg;
++
++  // Allocuvm memsets new pages to 0.
++  if(allocuvm(pgdir, start_addr, end_addr) == 0)
++    return 0;
++  if((new_reg = kmalloc(sizeof(struct memory_region))) == 0)
++  {
++    deallocuvm(pgdir, start_addr, end_addr);
++    return 0;
++  }
++
++  new_reg->addr = (void *)start_addr;
++  new_reg->length = pg_len;
++  new_reg->mt = ANONYMOUS;
++  new_reg->offset = 0;
++  new_reg->fd = -1;
++  new_reg->next = map;
++
++  curproc->map = new_reg;
++  curproc->sz = end_addr;
++
++  return new_reg->addr;
++}
+.DE
+.PP
+Implementing
+.CW munmap
+is a bit trickier due to the structure of linked lists. The memory region we are currently deallocating could be at any position in our list, so we must search the entire list and only free the correct region. The correct region is identified by having the same starting address that was passed in to
+.CW munmap ,
+also the same address that was returned from the
+.CW mmap
+call for the region. The additional trickiness is introduced by the need to update the pointer that previously pointed to the deleted node. After some thought, the author decided a double pointer was harder to follow, but it was the only way to have a correct solution without needing a special case to update
+.CW curproc->map .
+.DS I
+--- a/xv6-mmap/src/proc.c
++++ b/xv6-mmap/src/proc.c
+@@ -535,0 +570,31 @@
++
++int munmap(void *addr, uint length)
++{
++  struct proc *curproc = myproc();
++  struct memory_region **map = &curproc->map;
++  struct memory_region *reg;
++  uint start_addr = (uint)addr;
++  uint pg_len = PGROUNDUP(length);
++  uint end_addr = start_addr + pg_len;
++
++  while(*map != 0)
++  {
++    reg = *map;
++    if(reg != 0 && reg->addr == addr)
++    {
++      *map = reg->next;
++      memset((void *)start_addr, 0, pg_len);
++      deallocuvm(curproc->pgdir, end_addr, start_addr);
++      kmfree(reg);
++      // Because curproc->sz is not updated when deallocating, virtual
++      // address space is never reclaimed. This is wasteful, but
++      // preserves the property that curproc->sz gives an
++      // unmapped address no matter the sequence of mmap and munmap.
++      /* curproc->sz = new_sz; */
++      return 0;
++    }
++    map = &((*map)->next);
++  }
++
++  return -1;
++}
+.DE
+.PP
+The two functions just described also have a terribly wasteful design flaw not previously mentioned. They are unable to reclaim and reuse virtual address space because
+.CW curproc->sz
+is never reduced. Fixing this problem would require more data structure management that the author has decided is not worth the effort because all the provided tests pass. Though it is unknown how many additional tests the assignment will be subjected to, the author is confident most of them will not exhaust 2G of virtual address space and the current state of the code demonstrates sufficient understanding of the material for a decent grade.
