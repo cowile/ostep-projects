@@ -65,7 +65,10 @@ static int pagefault_handler(struct trapframe *tf)
         return -1;
       }
 
-      memset(start_addr, 0, PGSIZE);
+      if((map->mp & PROT_WRITE) != 0)
+        memset(start_addr, 0, PGSIZE);
+
+      lcr3(V2P(pgdir));
       return 0;
     }
 

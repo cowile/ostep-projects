@@ -564,6 +564,7 @@ void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
 
   curproc->map = new_reg;
   curproc->sz = end_addr;
+  lcr3(V2P(pgdir));
 
   return new_reg->addr;
 }
@@ -580,7 +581,7 @@ int munmap(void *addr, uint length)
   while(*map != 0)
   {
     reg = *map;
-    if(reg != 0 && reg->addr == addr)
+    if(reg->addr == addr)
     {
       *map = reg->next;
       // We can't memset here after using lazy allocation because our
