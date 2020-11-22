@@ -32,6 +32,21 @@ idtinit(void)
   lidt(idt, sizeof(idt));
 }
 
+static int pagefault_handler(struct trapframe *tf)
+{
+  void *fault_addr = (void *)rcr2();
+  struct proc *curproc = myproc();
+
+  cprintf("============in pagefault_handler============\n");
+  cprintf("pid %d %s: trap %d err %d on cpu %d "
+          "eip 0x%x addr 0x%x\n",
+          curproc->pid, curproc->name, tf->trapno,
+          tf->err, cpuid(), tf->eip, fault_addr);
+
+  return -1;
+}
+
+
 //PAGEBREAK: 41
 void
 trap(struct trapframe *tf)
@@ -43,6 +58,13 @@ trap(struct trapframe *tf)
     syscall();
     if(myproc()->killed)
       exit();
+    return;
+  }
+
+  if(tf->trapno == T_PGFLT
+     && myproc() != 0
+     && (pagefault_handler(tf) == 0))
+  {
     return;
   }
 
