@@ -471,6 +471,16 @@ int sys_munmap(void)
   if(argint(0, &addr) < 0 || argint(1, &length) < 0)
     return -1;
 
-  // Last four arguments are not yet implemented and have no effect.
   return munmap((void *)addr, (uint)length);
+}
+
+int sys_msync(void)
+{
+  int addr;
+  int length;
+
+  if(argint(0, &addr) < 0 || argint(1, &length) < 0)
+    return -1;
+
+  return msync((void *)addr, (uint)length);
 }

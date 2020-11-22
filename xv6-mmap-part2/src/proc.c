@@ -598,3 +598,8 @@ int munmap(void *addr, uint length)
 
   return -1;
 }
+
+int msync(void *addr, uint length)
+{
+  return -1;
+}
