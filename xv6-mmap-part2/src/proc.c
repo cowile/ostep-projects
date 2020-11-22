@@ -547,8 +547,8 @@ void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
   struct memory_region *new_reg;
 
   // Allocuvm memsets new pages to 0.
-  if(allocuvm(pgdir, start_addr, end_addr) == 0)
-    return 0;
+  /* if(allocuvm(pgdir, start_addr, end_addr) == 0) */
+  /*   return 0; */
   if((new_reg = kmalloc(sizeof(struct memory_region))) == 0)
   {
     deallocuvm(pgdir, start_addr, end_addr);
