@@ -1,4 +1,3 @@
-typedef unsigned int pte_t;
 struct buf;
 struct context;
 struct file;
@@ -180,7 +179,7 @@ void            uartintr(void);
 void            uartputc(int);
 
 // vm.c
-pte_t * walkpgdir(pde_t *pgdir, const void *va, int alloc);
+int mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
 void            seginit(void);
 void            kvmalloc(void);
 pde_t*          setupkvm(void);

@@ -557,8 +557,8 @@ void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
 
   new_reg->addr = (void *)start_addr;
   new_reg->length = pg_len;
-  new_reg->mt = ANONYMOUS;
-  new_reg->mp = prot;
+  new_reg->mt = MAP_ANONYMOUS;
+  new_reg->mp = PTE_U | prot;
   new_reg->offset = 0;
   new_reg->fd = -1;
   new_reg->next = map;

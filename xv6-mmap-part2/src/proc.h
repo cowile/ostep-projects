@@ -32,10 +32,7 @@ struct context {
   uint eip;
 };
 
-enum memory_type { ANONYMOUS, FILE };
-enum memory_prot {
-  PROT_WRITE = 0x1,
-};
+#include "mman.h"
 
 struct memory_region {
   void *addr;

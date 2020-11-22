@@ -35,11 +35,11 @@ idtinit(void)
 static int pagefault_handler(struct trapframe *tf)
 {
   void *fault_addr = (void *)rcr2();
+  char *mem;
   uint start_addr = PGROUNDDOWN((uint)fault_addr);
   uint end_addr = start_addr + PGSIZE;
   struct proc *curproc = myproc();
   pde_t *pgdir = curproc->pgdir;
-  /* pte_t *pgtab; */
   struct memory_region *map = curproc->map;
 
   cprintf("============in pagefault_handler============\n");
@@ -52,14 +52,12 @@ static int pagefault_handler(struct trapframe *tf)
   {
     if(start_addr >= (uint)map->addr && end_addr <= (uint)(map->addr + map->length))
     {
-      if(allocuvm(pgdir, start_addr, end_addr) == 0)
+      mem = kalloc();
+      if(mappages(pgdir, (void*)start_addr, PGSIZE, V2P(mem), map->mp) == -1)
+      {
+        kfree(mem);
         return -1;
-      /* if((map->mp & PROT_WRITE) == 0) */
-      /* { */
-      /*   // Will succeed because it was allocated above. */
-      /*   pgtab = walkpgdir(pgdir, (void*)start_addr, 0); */
-      /*   *pgtab = *pgtab & ~PTE_W; */
-      /* } */
+      }
       return 0;
     }
   }
