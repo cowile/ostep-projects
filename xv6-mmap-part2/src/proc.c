@@ -550,20 +550,29 @@ void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
   /*   return 0; */
   if((new_reg = kmalloc(sizeof(struct memory_region))) == 0)
   {
-    deallocuvm(pgdir, start_addr, end_addr);
+    /* deallocuvm(pgdir, start_addr, end_addr); */
     return 0;
   }
 
   new_reg->addr = (void *)start_addr;
   new_reg->length = pg_len;
-  new_reg->mt = MAP_ANONYMOUS;
+  new_reg->mt = flags;
   new_reg->mp = PTE_U | prot;
-  new_reg->offset = 0;
-  new_reg->fd = -1;
+  new_reg->offset = offset;
+  if(fd > -1)
+  {
+    new_reg->fp = filedup(curproc->ofile[fd]); // validated by argfd in sys_mmap
+  }
+  else
+  {
+    new_reg->fp = 0;
+  }
   new_reg->next = map;
 
   curproc->map = new_reg;
   curproc->sz = end_addr;
+  // Unsure why this is necessary, but there is a cache problem
+  // without it.
   lcr3(V2P(pgdir));
 
   return new_reg->addr;
@@ -587,6 +596,10 @@ int munmap(void *addr, uint length)
       // We can't memset here after using lazy allocation because our
       // region may now include pages that were never mapped.
       /* memset((void *)start_addr, 0, pg_len); */
+      if(reg->fp != 0)
+      {
+        fileclose(reg->fp);
+      }
       deallocuvm(curproc->pgdir, end_addr, start_addr);
       kmfree(reg);
       // Because curproc->sz is not updated when deallocating, virtual
@@ -604,5 +617,38 @@ int munmap(void *addr, uint length)
 
 int msync(void *addr, uint length)
 {
+  struct proc *curproc = myproc();
+  pde_t *pgdir = curproc->pgdir;
+  struct memory_region *map = curproc->map;
+  uint reg_off;
+  uint bytes;
+
+  while(map != 0)
+  {
+    if(map->addr == addr && map->mt == MAP_FILE)
+    {
+      if(fileseek(map->fp, map->offset) == -1)
+      {
+        return -1;
+      }
+
+      for(reg_off = 0; reg_off < length; reg_off += PGSIZE)
+      {
+        if(walkpgdir(pgdir, addr + reg_off, 0) == 0)
+          continue;
+
+        if(fileseek(map->fp, map->offset + reg_off) < 0)
+          return -1;
+
+        bytes = length - reg_off > PGSIZE ? PGSIZE : length - reg_off;
+
+        if(filewrite(map->fp, (char *)(addr + reg_off), (int)bytes) < 0)
+          return -1;
+      }
+
+      return 0;
+    }
+    map = map->next;
+  }
   return -1;
 }

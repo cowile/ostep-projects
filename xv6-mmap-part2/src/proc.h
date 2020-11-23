@@ -40,6 +40,7 @@ struct memory_region {
   enum memory_type mt;
   int mp;
   uint offset;
+  struct file *fp;
   int fd;
   struct memory_region *next;
 };

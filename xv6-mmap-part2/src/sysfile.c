@@ -452,17 +452,19 @@ void *sys_mmap(void)
   // We can't use argptr because addr is only advisory and can by
   // anything.
   int addr;
-  int length;
+  uint length;
   int prot;
   int flags;
-  int fd;
+  int fd = -1;
+  struct file *fp = 0;
   int offset;
 
   if(argint(0, &addr) < 0
-     || argint(1, &length) < 0
+     || argint(1, (int*)&length) < 0
      || argint(2, &prot) < 0
      || argint(3, &flags) < 0
-     || argint(4, &fd) < 0
+     || (argfd(4, 0, &fp) < 0 && prot == MAP_FILE)
+     || (fd = fdalloc(fp)) < 0
      || argint(5, &offset) < 0)
     return 0;
 

@@ -59,14 +59,31 @@ static int pagefault_handler(struct trapframe *tf)
         return -1;
       }
       mem = kalloc();
-      if(mappages(pgdir, (void*)start_addr, PGSIZE, V2P(mem), map->mp) == -1)
+
+      // Needs to be writable so we can fill the memory.
+      if(mappages(pgdir, start_addr, PGSIZE, V2P(mem), PTE_U | PTE_W) == -1)
       {
         kfree(mem);
         return -1;
       }
 
-      if((map->mp & PROT_WRITE) != 0)
+      // This isn't required by the specification, but the tests need
+      // it to pass because they use strlen and stcmp without setting
+      // the null byte in their strings.
+      if(map->mt == MAP_ANONYMOUS)
+      {
         memset(start_addr, 0, PGSIZE);
+      }
+      else
+      {
+        fileread(map->fp, start_addr, PGSIZE);
+      }
+
+      pte = walkpgdir(pgdir, start_addr, 0);
+      if((map->mp & PROT_WRITE) == 0)
+      {
+        *pte &= ~PTE_W;
+      }
 
       lcr3(V2P(pgdir));
       return 0;
