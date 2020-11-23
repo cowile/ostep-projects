@@ -92,6 +92,19 @@ filestat(struct file *f, struct stat *st)
   return -1;
 }
 
+int fileseek(struct file *f, uint offset)
+{
+  if(f->type != FD_INODE)
+  {
+    return -1;
+  }
+
+  ilock(f->ip);
+  f->off = offset;
+  iunlock(f->ip);
+  return 0;
+}
+
 // Read from file f.
 int
 fileread(struct file *f, char *addr, int n)
@@ -154,4 +167,3 @@ filewrite(struct file *f, char *addr, int n)
   }
   panic("filewrite");
 }
-
