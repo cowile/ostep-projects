@@ -562,10 +562,12 @@ void *mmap(void *addr, uint length, int prot, int flags, int fd, int offset)
   if(fd > -1)
   {
     new_reg->fp = filedup(curproc->ofile[fd]); // validated by argfd in sys_mmap
+    new_reg->fd = fd;
   }
   else
   {
     new_reg->fp = 0;
+    new_reg->fd = -1;
   }
   new_reg->next = map;
 
@@ -599,6 +601,7 @@ int munmap(void *addr, uint length)
       if(reg->fp != 0)
       {
         fileclose(reg->fp);
+        curproc->ofile[reg->fd] = 0;
       }
       deallocuvm(curproc->pgdir, end_addr, start_addr);
       kmfree(reg);

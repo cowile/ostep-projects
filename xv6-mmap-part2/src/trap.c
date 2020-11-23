@@ -41,6 +41,7 @@ static int pagefault_handler(struct trapframe *tf)
   struct proc *curproc = myproc();
   pde_t *pgdir = curproc->pgdir;
   struct memory_region *map = curproc->map;
+  int bytes = 0;
 
   cprintf("============in pagefault_handler============\n");
   cprintf("pid %d %s: trap %d err %d on cpu %d "
@@ -67,17 +68,21 @@ static int pagefault_handler(struct trapframe *tf)
         return -1;
       }
 
+      if(map->mt == MAP_FILE)
+      {
+        fileseek(map->fp, map->offset);
+        bytes = fileread(map->fp, start_addr, PGSIZE);
+      }
+
+      if(bytes < 0)
+      {
+        return -1;
+      }
+
       // This isn't required by the specification, but the tests need
       // it to pass because they use strlen and stcmp without setting
       // the null byte in their strings.
-      if(map->mt == MAP_ANONYMOUS)
-      {
-        memset(start_addr, 0, PGSIZE);
-      }
-      else
-      {
-        fileread(map->fp, start_addr, PGSIZE);
-      }
+      memset(start_addr + bytes, 0, PGSIZE - bytes);
 
       pte = walkpgdir(pgdir, start_addr, 0);
       if((map->mp & PROT_WRITE) == 0)
